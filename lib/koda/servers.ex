@@ -233,6 +233,9 @@ defmodule Koda.Servers do
   end
 
   def create_role(server_id, attrs) do
+    # is_default is set exclusively by create_server's internal logic --
+    # never accepted from the public API, same protection update_role has.
+    attrs = Map.drop(attrs, ["is_default", :is_default])
     %Role{}
     |> Role.changeset(Map.put(attrs, "server_id", server_id))
     |> Repo.insert()

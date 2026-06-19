@@ -30,7 +30,7 @@ defmodule Koda.Servers.Role do
 
   def changeset(role, attrs) do
     role
-    |> cast(attrs, [:name, :color, :position, :permissions, :server_id])
+    |> cast(attrs, [:name, :color, :position, :is_default, :permissions, :server_id])
     |> validate_required([:name, :server_id])
     |> validate_length(:name, min: 1, max: 50)
     |> validate_format(:color, ~r/^#[0-9A-Fa-f]{6}$/, message: "must be a hex color like #7B68EE")
