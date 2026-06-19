@@ -10,7 +10,6 @@ defmodule Koda.Application do
       # Database
       Koda.Repo,
       # Guardian token sweeper
-      Guardian.DB.Token.SweeperServer,
       # PubSub
       {Phoenix.PubSub, name: Koda.PubSub},
       # Presence
