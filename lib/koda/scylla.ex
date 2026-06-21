@@ -20,7 +20,9 @@ defmodule Koda.Scylla do
         nodes:             nodes,
         pool_size:         size,
         keyspace:          @keyspace,
-        transport_options: transport_opts
+        transport_options: transport_opts,
+        backoff_min:       1_000,
+        backoff_max:       5_000
       ]}
     ]
 
