@@ -12,8 +12,8 @@ defmodule Koda.Scylla.Schema do
   """
   require Logger
 
-  @max_attempts 5
-  @retry_delay_ms 2_000
+  @max_attempts 15
+  @retry_delay_ms 4_000
 
   def setup!, do: attempt(1)
 
