@@ -1,0 +1,12 @@
+%% Erlang/OTP global resolver configuration.
+%%
+%% Fly.io's private network (.internal hostnames) is IPv6-only -- there
+%% is no A record at all for koda-db-fly.internal, only AAAA. Without
+%% this, Erlang's default resolver behavior tries IPv4 first, gets
+%% nxdomain (confirmed directly via :inet.getaddr/2), and fails before
+%% ever attempting a real connection -- regardless of any
+%% transport_options passed to individual libraries like Xandra, since
+%% that only governs the eventual socket, not this earlier resolution
+%% step. This makes IPv6 resolution the default for the entire VM.
+
+{inet6, true}.
