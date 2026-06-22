@@ -4,6 +4,17 @@ defmodule Koda.Chat do
 
   @page_size 50
 
+  # CQL's uuid/timeuuid types need the 16-byte binary wire format, not
+  # the human-readable dashed string ("8ecdd2b9-...") that arrives from
+  # URL params, JSON bodies, or UUID.uuid1()/uuid4() calls. Without this
+  # conversion, Xandra raises FunctionClauseError trying to encode the
+  # string directly. Ecto.UUID.dump!/1 does exactly this conversion --
+  # it's already a dependency for the Postgres side of the app, so no
+  # new dependency needed.
+  defp to_uuid_binary(uuid_string) when is_binary(uuid_string) do
+    Ecto.UUID.dump!(uuid_string)
+  end
+
   # -- Channel messages --------------------------------------------------------
 
   def send_message(channel_id, sender_id, content, opts \\ []) do
@@ -19,7 +30,13 @@ defmodule Koda.Chat do
     """
 
     case Koda.Scylla.execute(cql, [
-      channel_id, bucket, message_id, sender_id, content, encrypted, now
+      to_uuid_binary(channel_id),
+      bucket,
+      to_uuid_binary(message_id),
+      to_uuid_binary(sender_id),
+      content,
+      encrypted,
+      now
     ]) do
       {:ok, _} ->
         msg = %{
@@ -45,7 +62,7 @@ defmodule Koda.Chat do
 
     cql = "SELECT * FROM koda.messages WHERE channel_id = ? AND bucket = ? ORDER BY id DESC LIMIT ?"
 
-    case Koda.Scylla.execute(cql, [channel_id, bucket, limit]) do
+    case Koda.Scylla.execute(cql, [to_uuid_binary(channel_id), bucket, limit]) do
       {:ok, page}     -> {:ok, Enum.to_list(page)}
       {:error, reason}-> {:error, reason}
     end
@@ -66,7 +83,13 @@ defmodule Koda.Chat do
     """
 
     case Koda.Scylla.execute(cql, [
-      conversation_id, bucket, message_id, sender_id, content, encrypted, now
+      to_uuid_binary(conversation_id),
+      bucket,
+      to_uuid_binary(message_id),
+      to_uuid_binary(sender_id),
+      content,
+      encrypted,
+      now
     ]) do
       {:ok, _} ->
         msg = %{
@@ -91,7 +114,7 @@ defmodule Koda.Chat do
 
     cql = "SELECT * FROM koda.dm_messages WHERE conversation_id = ? AND bucket = ? ORDER BY id DESC LIMIT ?"
 
-    case Koda.Scylla.execute(cql, [conversation_id, bucket, limit]) do
+    case Koda.Scylla.execute(cql, [to_uuid_binary(conversation_id), bucket, limit]) do
       {:ok, page}      -> {:ok, Enum.to_list(page)}
       {:error, reason} -> {:error, reason}
     end
@@ -101,11 +124,11 @@ defmodule Koda.Chat do
 
   def add_reaction(message_id, emoji, user_id) do
     cql = "INSERT INTO koda.message_reactions (message_id, emoji, user_id) VALUES (?, ?, ?)"
-    Koda.Scylla.execute(cql, [message_id, emoji, user_id])
+    Koda.Scylla.execute(cql, [to_uuid_binary(message_id), emoji, to_uuid_binary(user_id)])
   end
 
   def remove_reaction(message_id, emoji, user_id) do
     cql = "DELETE FROM koda.message_reactions WHERE message_id = ? AND emoji = ? AND user_id = ?"
-    Koda.Scylla.execute(cql, [message_id, emoji, user_id])
+    Koda.Scylla.execute(cql, [to_uuid_binary(message_id), emoji, to_uuid_binary(user_id)])
   end
 end
