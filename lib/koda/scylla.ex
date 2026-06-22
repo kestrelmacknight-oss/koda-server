@@ -31,6 +31,18 @@ defmodule Koda.Scylla do
 
   def pool, do: @pool_name
 
+  @doc """
+  Kills and restarts the Xandra.Cluster child specifically, forcing a
+  genuinely fresh connection attempt -- as opposed to waiting on
+  whatever Cluster's own internal retry state is currently doing.
+  Suspected fix for a process that decided early on it can't connect
+  and never meaningfully retries discovery again on its own.
+  """
+  def force_reconnect! do
+    Supervisor.terminate_child(__MODULE__, Xandra.Cluster)
+    Supervisor.restart_child(__MODULE__, Xandra.Cluster)
+  end
+
   def execute!(query, params \\ [], opts \\ []) do
     Xandra.Cluster.execute!(@pool_name, query, params, opts)
   end

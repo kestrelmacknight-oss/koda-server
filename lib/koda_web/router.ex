@@ -40,7 +40,8 @@ defmodule KodaWeb.Router do
     post   "/auth/totp/setup",              AuthController, :totp_setup
 
     # TEMPORARY -- remove once Scylla connection issue is resolved
-    get "/debug/scylla", DebugController, :scylla
+    get  "/debug/scylla",          DebugController, :scylla
+    post "/debug/scylla/reconnect", DebugController, :force_reconnect
     post   "/auth/totp/verify",             AuthController, :totp_verify
     get    "/auth/keys",                    AuthController, :get_keys
     put    "/auth/keys",                    AuthController, :upload_keys
