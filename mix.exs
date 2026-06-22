@@ -52,7 +52,7 @@ defmodule Koda.MixProject do
       # Background jobs
       {:oban,                "~> 2.18"},
       # ScyllaDB / Cassandra
-      {:xandra,              "~> 0.18"},
+      {:xandra,              ">= 0.18.0"},
       # UUID generation (TimeUUID for ScyllaDB)
       {:uuid,                "~> 1.1"},
       # Rate limiting
