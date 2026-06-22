@@ -38,6 +38,9 @@ defmodule KodaWeb.Router do
     post   "/auth/password/force_change",   AuthController, :force_change_password
     post   "/auth/verify_email/resend",     AuthController, :resend_verification
     post   "/auth/totp/setup",              AuthController, :totp_setup
+
+    # TEMPORARY -- remove once Scylla connection issue is resolved
+    get "/debug/scylla", DebugController, :scylla
     post   "/auth/totp/verify",             AuthController, :totp_verify
     get    "/auth/keys",                    AuthController, :get_keys
     put    "/auth/keys",                    AuthController, :upload_keys
