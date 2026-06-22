@@ -39,8 +39,14 @@ defmodule Koda.Scylla do
   and never meaningfully retries discovery again on its own.
   """
   def force_reconnect! do
-    Supervisor.terminate_child(__MODULE__, Xandra.Cluster)
-    Supervisor.restart_child(__MODULE__, Xandra.Cluster)
+    case Supervisor.which_children(__MODULE__) do
+      [{child_id, _pid, _type, _modules}] ->
+        Supervisor.terminate_child(__MODULE__, child_id)
+        Supervisor.restart_child(__MODULE__, child_id)
+
+      other ->
+        {:error, {:unexpected_children, other}}
+    end
   end
 
   def execute!(query, params \\ [], opts \\ []) do
