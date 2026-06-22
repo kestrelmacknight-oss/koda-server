@@ -45,4 +45,4 @@ COPY --chown=nobody:root rel/inetrc /app/inetrc
 
 USER nobody
 
-CMD ["sleep", "infinity"]
+CMD ["/app/bin/koda", "start"]

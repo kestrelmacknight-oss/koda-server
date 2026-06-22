@@ -1,81 +1,80 @@
-defmodule Koda.Scylla do
-  @moduledoc "ScyllaDB connection pool supervisor."
-  use Supervisor
+import Config
 
-  @pool_name :koda_scylla
-  @keyspace  "koda"
+if config_env() == :prod do
+  database_url =
+    System.get_env("DATABASE_URL") ||
+      raise "DATABASE_URL is not set. fly secrets set DATABASE_URL=postgresql://..."
 
-  def start_link(_), do: Supervisor.start_link(__MODULE__, [], name: __MODULE__)
+  config :koda, Koda.Repo,
+    url:       database_url,
+    pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
+    ssl:       true,
+    ssl_opts:  [verify: :verify_none]
 
-  @impl true
-  def init(_) do
-    cfg      = Application.get_env(:koda, :scylla, [])
-    nodes    = Keyword.get(cfg, :nodes, ["localhost:9042"])
-    size     = Keyword.get(cfg, :pool_size, 5)
-    username = Keyword.get(cfg, :username)
-    password = Keyword.get(cfg, :password)
+  secret_key_base =
+    System.get_env("SECRET_KEY_BASE") ||
+      raise "SECRET_KEY_BASE is not set. Generate: openssl rand -hex 64"
 
-    auth =
-      if username && password do
-        {Xandra.Authenticator.Password, [username: username, password: password]}
-      else
-        nil
-      end
+  config :koda, KodaWeb.Endpoint,
+    url:    [host: "api.koda.fyi", port: 443, scheme: "https"],
+    http:   [ip: {0, 0, 0, 0, 0, 0, 0, 0},
+             port: String.to_integer(System.get_env("PORT") || "8080")],
+    secret_key_base: secret_key_base,
+    server: true,
+    check_origin: ["https://koda.fyi", "https://www.koda.fyi"]
 
-    children = [
-      {Xandra.Cluster, [
-        name:           @pool_name,
-        nodes:          nodes,
-        pool_size:      size,
-        keyspace:       @keyspace,
-        authentication: auth,
-        backoff_min:    1_000,
-        backoff_max:    5_000
-      ]}
-    ]
+  config :koda, Koda.Auth.Guardian,
+    issuer:     "koda",
+    secret_key: System.get_env("GUARDIAN_SECRET_KEY") ||
+      raise("GUARDIAN_SECRET_KEY not set. Generate: openssl rand -hex 32"),
+    ttl: {30, :days}
 
-    Supervisor.init(children, strategy: :one_for_one)
-  end
+  config :koda, Koda.Mailer,
+    adapter: Swoosh.Adapters.Resend,
+    api_key: System.get_env("RESEND_API_KEY") ||
+      raise("RESEND_API_KEY not set")
 
-  def pool, do: @pool_name
+  config :swoosh, :api_client, Swoosh.ApiClient.Finch
 
-  @doc """
-  Kills and restarts the Xandra.Cluster child specifically, forcing a
-  genuinely fresh connection attempt -- as opposed to waiting on
-  whatever Cluster's own internal retry state is currently doing.
-  Suspected fix for a process that decided early on it can't connect
-  and never meaningfully retries discovery again on its own.
-  """
-  def force_reconnect! do
-    case Supervisor.which_children(__MODULE__) do
-      [{child_id, _pid, _type, _modules}] ->
-        Supervisor.terminate_child(__MODULE__, child_id)
-        Supervisor.restart_child(__MODULE__, child_id)
+  config :koda, :email,
+    from_name:    "Koda",
+    from_address: "noreply@koda.fyi",
+    support:      "support@koda.fyi",
+    app_url:      "https://koda.fyi",
+    terms_url:    "https://koda.fyi/terms.html",
+    privacy_url:  "https://koda.fyi/privacy.html"
 
-      other ->
-        {:error, {:unexpected_children, other}}
-    end
-  end
+  scylla_nodes =
+    System.get_env("SCYLLA_NODES", "koda-scylla.internal:9042")
+    |> String.split(",")
+    |> Enum.map(&String.trim/1)
 
-  def execute!(query, params \\ [], opts \\ []) do
-    Xandra.Cluster.execute!(@pool_name, query, params, opts)
-  end
+  config :koda, :scylla,
+    nodes:     scylla_nodes,
+    keyspace:  "koda",
+    pool_size: String.to_integer(System.get_env("SCYLLA_POOL_SIZE") || "20"),
+    username:  System.get_env("SCYLLA_USERNAME"),
+    password:  System.get_env("SCYLLA_PASSWORD")
 
-  def execute(query, params \\ [], opts \\ []) do
-    Xandra.Cluster.execute(@pool_name, query, params, opts)
-  end
+  config :koda, :livekit,
+    url:        System.get_env("LIVEKIT_URL",        "http://koda-livekit.internal:7880"),
+    public_url: System.get_env("LIVEKIT_PUBLIC_URL", "wss://voice.koda.fyi"),
+    api_key:    System.get_env("LIVEKIT_API_KEY")    || raise("LIVEKIT_API_KEY not set"),
+    api_secret: System.get_env("LIVEKIT_API_SECRET") || raise("LIVEKIT_API_SECRET not set")
 
-  def prepare!(query) do
-    Xandra.Cluster.prepare!(@pool_name, query)
-  end
+  config :cors_plug,
+    origin:      ["https://koda.fyi", "https://www.koda.fyi"],
+    max_age:     86_400,
+    methods:     ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    headers:     ["Authorization", "Content-Type", "Accept", "X-App-Version"],
+    credentials: true
 
-  def run(fun) do
-    Xandra.Cluster.run(@pool_name, fun)
-  end
+  config :koda, Oban,
+    engine:  Oban.Engines.Basic,
+    repo:    Koda.Repo,
+    queues:  [default: 10, email: 5, notifications: 20]
 
-  # Bucket key for time-partitioned message storage (YYYYMM integer)
-  def month_bucket(datetime \\ nil) do
-    dt = datetime || DateTime.utc_now()
-    dt.year * 100 + dt.month
-  end
+  config :logger, :console,
+    format:   "$time $metadata[$level] $message\n",
+    metadata: [:request_id, :user_id]
 end
