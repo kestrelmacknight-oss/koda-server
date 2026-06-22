@@ -9,20 +9,28 @@ defmodule Koda.Scylla do
 
   @impl true
   def init(_) do
-    cfg   = Application.get_env(:koda, :scylla, [])
-    nodes = Keyword.get(cfg, :nodes, ["localhost:9042"])
-    size  = Keyword.get(cfg, :pool_size, 5)
-    transport_opts = Keyword.get(cfg, :transport_options, [])
+    cfg      = Application.get_env(:koda, :scylla, [])
+    nodes    = Keyword.get(cfg, :nodes, ["localhost:9042"])
+    size     = Keyword.get(cfg, :pool_size, 5)
+    username = Keyword.get(cfg, :username)
+    password = Keyword.get(cfg, :password)
+
+    auth =
+      if username && password do
+        {Xandra.Authenticator.Password, [username: username, password: password]}
+      else
+        nil
+      end
 
     children = [
       {Xandra.Cluster, [
-        name:              @pool_name,
-        nodes:             nodes,
-        pool_size:         size,
-        keyspace:          @keyspace,
-        transport_options: transport_opts,
-        backoff_min:       1_000,
-        backoff_max:       5_000
+        name:           @pool_name,
+        nodes:          nodes,
+        pool_size:      size,
+        keyspace:       @keyspace,
+        authentication: auth,
+        backoff_min:    1_000,
+        backoff_max:    5_000
       ]}
     ]
 
