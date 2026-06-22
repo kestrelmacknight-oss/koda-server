@@ -57,12 +57,26 @@ defmodule Koda.Scylla do
     end
   end
 
-  def execute!(query, params \\ [], opts \\ []) do
-    Xandra.Cluster.execute!(@pool_name, query, params, opts)
-  end
+  # Always prepare-then-execute, rather than Xandra's "simple" query
+  # path. Simple queries can only auto-infer CQL types for plain
+  # Elixir types (string, integer, boolean, float) -- a raw binary
+  # (which is what a UUID/timeuuid value becomes after conversion)
+  # is ambiguous with no type hint, and Xandra has no encoding clause
+  # for it. Preparing first gets the real column types from the
+  # server's own schema, so binary UUID/timeuuid values encode
+  # correctly. Slightly more overhead per call than a cached prepared
+  # statement would be, but correctness matters more than that
+  # optimization right now.
 
   def execute(query, params \\ [], opts \\ []) do
-    Xandra.Cluster.execute(@pool_name, query, params, opts)
+    with {:ok, prepared} <- Xandra.Cluster.prepare(@pool_name, query) do
+      Xandra.Cluster.execute(@pool_name, prepared, params, opts)
+    end
+  end
+
+  def execute!(query, params \\ [], opts \\ []) do
+    prepared = Xandra.Cluster.prepare!(@pool_name, query)
+    Xandra.Cluster.execute!(@pool_name, prepared, params, opts)
   end
 
   def prepare!(query) do
