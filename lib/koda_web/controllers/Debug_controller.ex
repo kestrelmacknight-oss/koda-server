@@ -38,22 +38,32 @@ defmodule KodaWeb.DebugController do
   """
   def force_reconnect(conn, _params) do
     result = Koda.Scylla.force_reconnect!()
-    # Give the freshly-restarted Cluster a moment to actually connect
-    # before immediately querying it.
-    Process.sleep(3_000)
 
-    query_result =
-      try do
-        Xandra.Cluster.execute(:koda_scylla, "SELECT now() FROM system.local")
-      rescue
-        e -> {:rescued, Exception.format(:error, e, __STACKTRACE__)}
-      catch
-        kind, reason -> {:caught, kind, inspect(reason)}
-      end
+    # Poll every 2 seconds for up to 30 seconds, instead of a single
+    # short sleep -- Cluster's real discovery/connection process
+    # (control connection, then peer discovery, then pool setup) may
+    # genuinely take longer than a few seconds, especially on a fresh
+    # start. We want to know if it EVER succeeds, not just whether it
+    # already has after an arbitrary short wait.
+    attempts =
+      Enum.map(1..15, fn i ->
+        Process.sleep(2_000)
+
+        result =
+          try do
+            Xandra.Cluster.execute(:koda_scylla, "SELECT now() FROM system.local")
+          rescue
+            e -> {:rescued, Exception.format(:error, e, __STACKTRACE__)}
+          catch
+            kind, reason -> {:caught, kind, inspect(reason)}
+          end
+
+        %{attempt: i, seconds_elapsed: i * 2, result: inspect(result)}
+      end)
 
     json(conn, %{
       restart_result: inspect(result),
-      query_result_after_restart: inspect(query_result)
+      attempts: attempts
     })
   end
 end
