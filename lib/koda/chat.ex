@@ -159,7 +159,9 @@ defmodule Koda.Chat do
 
   defp fetch_usernames([]), do: %{}
   defp fetch_usernames(sender_ids) do
-    case Koda.Repo.query("SELECT id, username FROM users WHERE id = ANY($1::uuid[])", [sender_ids]) do
+    binary_ids = Enum.map(sender_ids, &to_uuid_binary/1)
+
+    case Koda.Repo.query("SELECT id, username FROM users WHERE id = ANY($1::uuid[])", [binary_ids]) do
       {:ok, %{rows: rows}} ->
         Map.new(rows, fn [id, username] -> {Ecto.UUID.load!(id), username} end)
 
