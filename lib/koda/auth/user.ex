@@ -1,10 +1,8 @@
 defmodule Koda.Auth.User do
   use Ecto.Schema
   import Ecto.Changeset
-
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
-
   schema "users" do
     field :username,             :string
     field :email,                :string
@@ -20,9 +18,9 @@ defmodule Koda.Auth.User do
     field :is_admin,             :boolean, default: false
     field :must_change_password, :boolean, default: false
     field :email_verified,       :boolean, default: false
+    field :settings,             :map, default: %{}
     timestamps(type: :utc_datetime)
   end
-
   def registration_changeset(user, attrs) do
     user
     |> cast(attrs, [:username, :email, :password, :password_confirmation,
@@ -40,7 +38,6 @@ defmodule Koda.Auth.User do
     |> downcase_email()
     |> hash_password()
   end
-
   def update_changeset(user, attrs) do
     user
     |> cast(attrs, [:display_name, :avatar_url, :bio, :status,
@@ -49,7 +46,15 @@ defmodule Koda.Auth.User do
     |> validate_length(:bio, max: 500)
     |> validate_inclusion(:status, ["online", "away", "dnd", "offline"])
   end
-
+  # Settings are stored as a single free-form JSON map, keyed by section
+  # (e.g. "voice", "appearance", "notifications") -- the client merges
+  # patches locally and sends the complete, already-merged object on
+  # every save, so this changeset just replaces the column wholesale
+  # rather than attempting any merge logic of its own.
+  def settings_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:settings])
+  end
   def password_changeset(user, attrs) do
     user
     |> cast(attrs, [:password, :password_confirmation])
@@ -59,29 +64,24 @@ defmodule Koda.Auth.User do
     |> hash_password()
     |> put_change(:must_change_password, false)
   end
-
   def totp_changeset(user, attrs) do
     user
     |> cast(attrs, [:totp_secret, :totp_enabled])
   end
-
   def valid_password?(%__MODULE__{hashed_password: hash}, password)
       when is_binary(hash) and byte_size(password) > 0 do
     Bcrypt.verify_pass(password, hash)
   end
-
   def valid_password?(_, _) do
     Bcrypt.no_user_verify()
     false
   end
-
   defp hash_password(changeset) do
     case get_change(changeset, :password) do
       nil -> changeset
       pwd -> put_change(changeset, :hashed_password, Bcrypt.hash_pwd_salt(pwd))
     end
   end
-
   defp downcase_email(changeset) do
     update_change(changeset, :email, &String.downcase/1)
   end

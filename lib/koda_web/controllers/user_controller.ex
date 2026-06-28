@@ -2,15 +2,25 @@ defmodule KodaWeb.UserController do
   use KodaWeb, :controller
 
   def get_settings(conn, _) do
-    json(conn, %{settings: %{
-      notifications_enabled: true,
-      theme: "dark",
-      language: "en"
-    }})
+    user = Guardian.Plug.current_resource(conn)
+    json(conn, %{settings: user.settings || %{}})
+  end
+
+  # The client (SettingsNotifier.patch) merges section updates locally
+  # and sends the complete, already-merged settings object every time --
+  # so this just stores whatever map it receives wholesale, with no
+  # server-side merge logic needed.
+  def update_settings(conn, %{"settings" => settings}) when is_map(settings) do
+    user = Guardian.Plug.current_resource(conn)
+
+    case user |> Koda.Auth.User.settings_changeset(%{settings: settings}) |> Koda.Repo.update() do
+      {:ok, updated} -> json(conn, %{settings: updated.settings})
+      {:error, _}    -> conn |> put_status(422) |> json(%{error: "Update failed"})
+    end
   end
 
   def update_settings(conn, _params) do
-    json(conn, %{ok: true})
+    conn |> put_status(400) |> json(%{error: "Missing settings object"})
   end
 
   def update_profile(conn, params) do
