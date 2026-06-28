@@ -20,6 +20,25 @@ defmodule Koda.Servers do
     "mention_everyone" => false
   }
 
+  # Full permission set for the auto-created "Admin" role, granted to
+  # every server's creator automatically. Distinct from the implicit
+  # owner?/2 bypass that already exists -- this makes admin status
+  # visible and explicit in the member list (rather than invisible
+  # ownership), and gives a ready-made role to hand to trusted
+  # co-admins later without building a separate mechanism for it.
+  @admin_role_permissions %{
+    "view_channels"    => true,
+    "send_messages"    => true,
+    "connect_voice"    => true,
+    "manage_server"    => true,
+    "manage_channels"  => true,
+    "manage_roles"     => true,
+    "manage_messages"  => true,
+    "kick_members"     => true,
+    "ban_members"      => true,
+    "mention_everyone" => true
+  }
+
   # ── Servers ────────────────────────────────────────────────────────────────
 
   def list_user_servers(user_id) do
@@ -73,6 +92,24 @@ defmodule Koda.Servers do
 
       %MemberRole{}
       |> MemberRole.changeset(%{member_id: member.id, role_id: default_role.id})
+      |> Repo.insert!()
+
+      # Admin role, automatically granted to the creator so they can
+      # manage roles/channels/members right away, with no manual
+      # assignment needed after the fact.
+      admin_role = %Role{}
+      |> Role.changeset(%{
+        server_id:  server.id,
+        name:       "Admin",
+        color:      "#FF6584",
+        position:   1,
+        is_default: false,
+        permissions: @admin_role_permissions
+      })
+      |> Repo.insert!()
+
+      %MemberRole{}
+      |> MemberRole.changeset(%{member_id: member.id, role_id: admin_role.id})
       |> Repo.insert!()
 
       # Default channels
