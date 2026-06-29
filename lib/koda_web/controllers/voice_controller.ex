@@ -18,4 +18,17 @@ defmodule KodaWeb.VoiceController do
       {:error, _} -> json(conn, %{participants: []})
     end
   end
+
+  # Private, user-scoped room for the device test screen -- not tied to
+  # any real channel, so it skips the channel/membership checks join_token
+  # does. Room name is unique per user ("koda-selftest-<user_id>"), so no
+  # one else would ever join it.
+  def self_test_token(conn, _params) do
+    user = Guardian.Plug.current_resource(conn)
+    synthetic_id = "selftest-#{user.id}"
+    token = Koda.Voice.LiveKit.generate_token(user, synthetic_id)
+    url = Application.get_env(:koda, :livekit, [])
+          |> Keyword.get(:public_url, "ws://localhost:7880")
+    json(conn, %{token: token, url: url, room: Koda.Voice.LiveKit.room_name(synthetic_id)})
+  end
 end
