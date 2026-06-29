@@ -89,6 +89,7 @@ defmodule KodaWeb.Router do
     # Voice
     get    "/channels/:channel_id/voice/token",        VoiceController, :token
     get    "/channels/:channel_id/voice/participants",  VoiceController, :participants
+    get    "/voice/self_test_token",                    VoiceController, :self_test_token
 
     # Invites
     get    "/servers/:server_id/invites",   InviteController, :index
