@@ -37,7 +37,8 @@ defmodule KodaWeb.DmController do
     user  = Guardian.Plug.current_resource(conn)
     convo = DirectMessages.get_conversation(conv_id, user.id)
     if convo do
-      case DirectMessages.send_message(conv_id, user.id, content) do
+      case DirectMessages.send_message(conv_id, user.id, content,
+             sender_username: user.username) do
         {:ok, msg}  -> conn |> put_status(201) |> json(%{message: msg})
         {:error, _} -> conn |> put_status(500) |> json(%{error: "Send failed"})
       end

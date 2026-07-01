@@ -64,7 +64,10 @@ defmodule Koda.DirectMessages do
     Koda.Chat.get_dm_messages(conversation_id, opts)
   end
 
-  def send_message(conversation_id, sender_id, content) do
-    Koda.Chat.send_dm_message(conversation_id, sender_id, content)
+  # opts forwarded to Chat.send_dm_message -- primarily used to pass
+  # sender_username: so the author field is populated correctly, matching
+  # the same pattern as channel messages via ChannelController.
+  def send_message(conversation_id, sender_id, content, opts \\ []) do
+    Koda.Chat.send_dm_message(conversation_id, sender_id, content, opts)
   end
 end
