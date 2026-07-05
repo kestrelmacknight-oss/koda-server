@@ -1,7 +1,6 @@
 defmodule Koda.Servers.Role do
   use Ecto.Schema
   import Ecto.Changeset
-
   @primary_key {:id, :binary_id, autogenerate: true}
   @foreign_key_type :binary_id
 
@@ -12,7 +11,7 @@ defmodule Koda.Servers.Role do
   @permission_keys ~w(
     view_channels send_messages connect_voice manage_server
     manage_channels manage_roles manage_messages kick_members
-    ban_members mention_everyone
+    ban_members mention_everyone post_media
   )
 
   schema "roles" do
@@ -33,7 +32,8 @@ defmodule Koda.Servers.Role do
     |> cast(attrs, [:name, :color, :position, :is_default, :permissions, :server_id])
     |> validate_required([:name, :server_id])
     |> validate_length(:name, min: 1, max: 50)
-    |> validate_format(:color, ~r/^#[0-9A-Fa-f]{6}$/, message: "must be a hex color like #7B68EE")
+    |> validate_format(:color, ~r/^#[0-9A-Fa-f]{6}$/,
+         message: "must be a hex color like #7B68EE")
     |> normalize_permissions()
   end
 

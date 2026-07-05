@@ -17,7 +17,8 @@ defmodule Koda.Servers do
     "manage_messages"  => false,
     "kick_members"     => false,
     "ban_members"      => false,
-    "mention_everyone" => false
+    "mention_everyone" => false,
+    "post_media"       => false
   }
 
   # Full permission set for the auto-created "Admin" role, granted to
@@ -36,7 +37,8 @@ defmodule Koda.Servers do
     "manage_messages"  => true,
     "kick_members"     => true,
     "ban_members"      => true,
-    "mention_everyone" => true
+    "mention_everyone" => true,
+    "post_media"       => true
   }
 
   # ── Servers ────────────────────────────────────────────────────────────────

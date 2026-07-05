@@ -67,6 +67,16 @@ defmodule KodaWeb.Router do
     patch  "/channels/:id",                 ChannelController, :update
     delete "/channels/:id",                 ChannelController, :delete
 
+    # Gallery
+    get    "/channels/:channel_id/gallery/collections",           GalleryController, :list_collections
+    post   "/channels/:channel_id/gallery/collections",           GalleryController, :create_collection
+    patch  "/gallery/collections/:id",                            GalleryController, :update_collection
+    delete "/gallery/collections/:id",                            GalleryController, :delete_collection
+    get    "/channels/:channel_id/gallery/posts",                 GalleryController, :list_posts
+    post   "/channels/:channel_id/gallery/posts",                 GalleryController, :create_post
+    get    "/gallery/collections/:collection_id/posts",           GalleryController, :list_collection_posts
+    delete "/gallery/posts/:id",                                  GalleryController, :delete_post
+
     # Categories (channel groupings)
     get    "/servers/:server_id/categories", CategoryController, :index
     post   "/servers/:server_id/categories", CategoryController, :create
