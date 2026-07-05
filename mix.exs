@@ -1,6 +1,5 @@
 defmodule Koda.MixProject do
   use Mix.Project
-
   def project do
     [
       app:             :koda,
@@ -13,17 +12,14 @@ defmodule Koda.MixProject do
       releases:        releases()
     ]
   end
-
   def application do
     [
       mod:                {Koda.Application, []},
       extra_applications: [:logger, :runtime_tools, :crypto]
     ]
   end
-
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_),     do: ["lib"]
-
   defp deps do
     [
       # Phoenix
@@ -37,8 +33,7 @@ defmodule Koda.MixProject do
       {:dns_cluster,         "~> 0.1.3"},
       {:telemetry_metrics,   "~> 1.0"},
       {:telemetry_poller,    "~> 1.1"},
-      # Auth -- Guardian 2.x includes Guardian.Phoenix.Socket built in.
-      # No separate guardian_phoenix package needed or available.
+      # Auth
       {:guardian,            "~> 2.3"},
       {:guardian_db,         "~> 3.0"},
       {:bcrypt_elixir,       "~> 3.2"},
@@ -57,11 +52,17 @@ defmodule Koda.MixProject do
       {:uuid,                "~> 1.1"},
       # Rate limiting
       {:hammer,              "~> 6.2"},
+      # R2 / S3-compatible presigned URL generation.
+      # ex_aws_s3 handles the AWS Signature V4 signing that R2 requires.
+      # hackney is the HTTP adapter ex_aws uses internally.
+      {:ex_aws,              "~> 2.5"},
+      {:ex_aws_s3,           "~> 2.5"},
+      {:hackney,             "~> 1.20"},
+      {:sweet_xml,           "~> 0.7"},
       # Dev only
       {:phoenix_live_dashboard, "~> 0.8", only: :dev},
     ]
   end
-
   defp releases do
     [
       koda: [
@@ -71,7 +72,6 @@ defmodule Koda.MixProject do
       ]
     ]
   end
-
   defp aliases do
     [
       setup:        ["deps.get", "ecto.setup"],

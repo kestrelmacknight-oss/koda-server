@@ -62,6 +62,13 @@ if config_env() == :prod do
     api_key:    System.get_env("LIVEKIT_API_KEY")    || raise("LIVEKIT_API_KEY not set"),
     api_secret: System.get_env("LIVEKIT_API_SECRET") || raise("LIVEKIT_API_SECRET not set")
 
+  config :koda, :r2,
+    access_key_id:     System.get_env("R2_ACCESS_KEY_ID"),
+    secret_access_key: System.get_env("R2_SECRET_ACCESS_KEY"),
+    account_id:        System.get_env("R2_ACCOUNT_ID"),
+    bucket:            System.get_env("R2_BUCKET")     || "koda-images",
+    cdn_url:           System.get_env("R2_CDN_URL")    || "https://cdn.koda.fyi"
+
   config :cors_plug,
     origin:      ["https://koda.fyi", "https://www.koda.fyi"],
     max_age:     86_400,

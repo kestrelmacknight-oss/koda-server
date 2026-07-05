@@ -52,6 +52,9 @@ defmodule KodaWeb.Router do
     patch  "/users/me/settings",            UserController, :update_settings
     patch  "/users/me",                     UserController, :update_profile
 
+     # Uploads
+    post   "/uploads/presign",              UploadController, :presign
+
     # Servers
     get    "/servers",                      ServerController, :index
     post   "/servers",                      ServerController, :create
