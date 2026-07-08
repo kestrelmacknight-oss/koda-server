@@ -32,12 +32,22 @@ defmodule Koda.Upload do
       key = build_key(user_id, upload_type, content_type)
       cdn_url = "#{cdn_base()}/#{key}"
       config = ex_aws_config()
+
+      # When signing against the custom domain (cdn.koda.fyi), R2 maps
+      # the domain directly to the bucket root -- the bucket name must
+      # NOT appear in the path. We pass an empty string as the bucket
+      # and include the real bucket name as the first path segment of
+      # the key, so the signed path is /koda-images/gallery/... but
+      # ex_aws treats "" as the bucket and the rest as the object key.
+      # This matches how R2 custom-domain presigned URLs are structured.
+      full_key = "#{bucket()}/#{key}"
+
       url =
         ExAws.S3.presigned_url(
           config,
           :put,
-          bucket(),
-          key,
+          "",
+          full_key,
           expires_in: @expires_in,
           headers: [{"content-type", content_type}]
         )
