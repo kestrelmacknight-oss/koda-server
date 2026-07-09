@@ -29,28 +29,28 @@ defmodule Koda.Upload do
   def presign(user_id, upload_type, content_type) do
     with :ok <- validate_content_type(content_type),
          :ok <- validate_upload_type(upload_type) do
-      key = build_key(user_id, upload_type, content_type)
-      cdn_url = "#{cdn_base()}/#{key}"
-      config = ex_aws_config()
+      key     = build_key(user_id, upload_type, content_type)
+      # cdn_url includes bucket in path since that's what cdn.koda.fyi
+      # actually serves from (confirmed via 404 test without bucket name).
+      cdn_url = "#{cdn_base()}/#{bucket()}/#{key}"
+      config  = ex_aws_config()
 
-      # When signing against the custom domain (cdn.koda.fyi), R2 maps
-      # the domain directly to the bucket root -- the bucket name must
-      # NOT appear in the path. We pass an empty string as the bucket
-      # and include the real bucket name as the first path segment of
-      # the key, so the signed path is /koda-images/gallery/... but
-      # ex_aws treats "" as the bucket and the rest as the object key.
-      # This matches how R2 custom-domain presigned URLs are structured.
-      full_key = "#{bucket()}/#{key}"
-
+      # R2 custom-domain presigned URL signing: the host is cdn.koda.fyi
+      # but the signature must be computed with the key only (no bucket
+      # prefix in the path), because R2 validates signatures bucket-
+      # relative even when accessed via custom domain. The bucket name
+      # appears in the served URL but NOT in the signed path.
       url =
         ExAws.S3.presigned_url(
           config,
           :put,
-          "",
-          full_key,
+          bucket(),
+          key,
           expires_in: @expires_in,
-          headers: [{"content-type", content_type}]
+          headers: [{"content-type", content_type}],
+          virtual_host: true
         )
+
       case url do
         {:ok, upload_url} ->
           {:ok, %{upload_url: upload_url, cdn_url: cdn_url, key: key}}
