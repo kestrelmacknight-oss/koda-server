@@ -30,34 +30,84 @@ defmodule Koda.Upload do
     with :ok <- validate_content_type(content_type),
          :ok <- validate_upload_type(upload_type) do
       key     = build_key(user_id, upload_type, content_type)
-      # cdn_url includes bucket in path since that's what cdn.koda.fyi
-      # actually serves from (confirmed via 404 test without bucket name).
       cdn_url = "#{cdn_base()}/#{bucket()}/#{key}"
-      config  = ex_aws_config()
 
-      # R2 custom-domain presigned URL signing: the host is cdn.koda.fyi
-      # but the signature must be computed with the key only (no bucket
-      # prefix in the path), because R2 validates signatures bucket-
-      # relative even when accessed via custom domain. The bucket name
-      # appears in the served URL but NOT in the signed path.
-      url =
-        ExAws.S3.presigned_url(
-          config,
-          :put,
-          bucket(),
-          key,
-          expires_in: @expires_in,
-          headers: [{"content-type", content_type}],
-          virtual_host: true
-        )
-
-      case url do
+      case sign_r2_put(key, content_type) do
         {:ok, upload_url} ->
           {:ok, %{upload_url: upload_url, cdn_url: cdn_url, key: key}}
         {:error, reason} ->
           {:error, reason}
       end
     end
+  end
+
+  # Builds an AWS Signature V4 presigned PUT URL directly, giving us
+  # full control over the host/path split that ex_aws_s3's virtual_host
+  # option doesn't support cleanly for R2 custom domains.
+  #
+  # R2 custom domain signing rules:
+  #   host   = cdn.koda.fyi  (custom domain, no bucket prefix)
+  #   path   = /koda-images/<key>  (bucket name IS in path for cdn.koda.fyi)
+  #   region = auto
+  defp sign_r2_put(key, content_type) do
+    cfg    = Application.get_env(:koda, :r2, [])
+    ak     = cfg[:access_key_id]     || System.get_env("R2_ACCESS_KEY_ID")
+    sk     = cfg[:secret_access_key] || System.get_env("R2_SECRET_ACCESS_KEY")
+    host   = "cdn.koda.fyi"
+    bkt    = bucket()
+    path   = "/#{bkt}/#{key}"
+    region = "auto"
+    service = "s3"
+
+    now      = DateTime.utc_now()
+    date_str = Calendar.strftime(now, "%Y%m%d")
+    dt_str   = Calendar.strftime(now, "%Y%m%dT%H%M%SZ")
+    expires  = Integer.to_string(@expires_in)
+
+    scope      = "#{date_str}/#{region}/#{service}/aws4_request"
+    credential = "#{ak}/#{scope}"
+
+    signed_headers = "content-type;host"
+
+    query = URI.encode_query([
+      {"X-Amz-Algorithm",     "AWS4-HMAC-SHA256"},
+      {"X-Amz-Credential",    credential},
+      {"X-Amz-Date",          dt_str},
+      {"X-Amz-Expires",       expires},
+      {"X-Amz-SignedHeaders", signed_headers},
+    ])
+
+    # Canonical request
+    canonical = Enum.join([
+      "PUT",
+      path,
+      query,
+      "content-type:#{content_type}\nhost:#{host}\n",
+      signed_headers,
+      "UNSIGNED-PAYLOAD"
+    ], "\n")
+
+    string_to_sign = Enum.join([
+      "AWS4-HMAC-SHA256",
+      dt_str,
+      scope,
+      Base.encode16(:crypto.hash(:sha256, canonical), case: :lower)
+    ], "\n")
+
+    signing_key =
+      hmac("AWS4#{sk}", date_str)
+      |> hmac(region)
+      |> hmac(service)
+      |> hmac("aws4_request")
+
+    signature = hmac(signing_key, string_to_sign) |> Base.encode16(case: :lower)
+
+    upload_url = "https://#{host}#{path}?#{query}&X-Amz-Signature=#{signature}"
+    {:ok, upload_url}
+  end
+
+  defp hmac(key, data) when is_binary(key) and is_binary(data) do
+    :crypto.mac(:hmac, :sha256, key, data)
   end
   # -- Private -----------------------------------------------------------------
   defp validate_content_type(ct) do
@@ -90,20 +140,6 @@ defmodule Koda.Upload do
       "application/pdf"  -> ".pdf"
       _                  -> ""
     end
-  end
-  defp ex_aws_config do
-    cfg = Application.get_env(:koda, :r2, [])
-    ExAws.Config.new(:s3,
-      access_key_id:     cfg[:access_key_id]     || System.get_env("R2_ACCESS_KEY_ID"),
-      secret_access_key: cfg[:secret_access_key] || System.get_env("R2_SECRET_ACCESS_KEY"),
-      region:            "auto",
-      # Use the custom Cloudflare domain rather than the raw R2 account
-      # endpoint -- cdn.koda.fyi has a universally-trusted Cloudflare
-      # certificate, whereas the raw *.r2.cloudflarestorage.com endpoint
-      # causes BoringSSL (Flutter on Windows) TLS handshake failures.
-      host:              "cdn.koda.fyi",
-      scheme:            "https://"
-    )
   end
   defp bucket do
     cfg = Application.get_env(:koda, :r2, [])
