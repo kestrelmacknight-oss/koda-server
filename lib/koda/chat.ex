@@ -153,7 +153,8 @@ defmodule Koda.Chat do
 
     Enum.map(msgs, fn msg ->
       sender_id = msg["sender_id"]
-      Map.put(msg, "author", %{"id" => sender_id, "username" => (Map.get(usernames, sender_id) || %{})[:username], "avatar_url" => (Map.get(usernames, sender_id) || %{})[:avatar_url]})
+      info = Map.get(usernames, sender_id) || %{}
+      Map.put(msg, "author", %{"id" => sender_id, "username" => info[:username], "avatar_url" => info[:avatar_url]})
     end)
   end
 
@@ -161,9 +162,9 @@ defmodule Koda.Chat do
   defp fetch_usernames(sender_ids) do
     binary_ids = Enum.map(sender_ids, &to_uuid_binary/1)
 
-    case Koda.Repo.query("SELECT id, username FROM users WHERE id = ANY($1::uuid[])", [binary_ids]) do
+    case Koda.Repo.query("SELECT id, username, avatar_url FROM users WHERE id = ANY($1::uuid[])", [binary_ids]) do
       {:ok, %{rows: rows}} ->
-        Map.new(rows, fn [id, username] -> {Ecto.UUID.load!(id), username} end)
+        Map.new(rows, fn [id, username, avatar_url] -> {Ecto.UUID.load!(id), %{username: username, avatar_url: avatar_url}} end)
 
       {:error, reason} ->
         Logger.error("[Chat] Failed to fetch usernames: #{inspect(reason)}")
