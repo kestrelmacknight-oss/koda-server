@@ -153,7 +153,7 @@ defmodule Koda.Chat do
 
     Enum.map(msgs, fn msg ->
       sender_id = msg["sender_id"]
-      Map.put(msg, "author", %{"id" => sender_id, "username" => Map.get(usernames, sender_id)})
+      Map.put(msg, "author", %{"id" => sender_id, "username" => (Map.get(usernames, sender_id) || %{})[:username], "avatar_url" => (Map.get(usernames, sender_id) || %{})[:avatar_url]})
     end)
   end
 
