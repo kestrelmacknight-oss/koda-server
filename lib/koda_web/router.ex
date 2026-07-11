@@ -103,6 +103,13 @@ defmodule KodaWeb.Router do
     get    "/channels/:channel_id/voice/token",        VoiceController, :token
     get    "/channels/:channel_id/voice/participants",  VoiceController, :participants
     get    "/voice/self_test_token",                    VoiceController, :self_test_token
+    
+    # Stage channels
+    post   "/channels/:channel_id/stage/join",               StageController, :join
+    post   "/channels/:channel_id/stage/raise_hand",         StageController, :raise_hand
+    post   "/channels/:channel_id/stage/lower_hand",         StageController, :lower_hand
+    post   "/channels/:channel_id/stage/grant/:user_id",     StageController, :grant_speaker
+    delete "/channels/:channel_id/stage/grant/:user_id",     StageController, :revoke_speaker
 
     # Invites
     get    "/servers/:server_id/invites",   InviteController, :index
