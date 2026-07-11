@@ -1,15 +1,19 @@
 defmodule Koda.Upload do
   @moduledoc """
-  Generates presigned PUT URLs for direct client-to-R2 uploads.
-  Flow:
-    1. Client POSTs to /api/v1/uploads/presign with {type, content_type}
-    2. Phoenix returns {upload_url, cdn_url, key}
-    3. Client PUTs the file directly to upload_url (no server bandwidth)
-    4. Client uses cdn_url as the final media URL in subsequent requests
+  Handles file uploads by receiving bytes from the client and streaming
+  them to R2 server-side via ex_aws_s3.
+
+  This avoids the client-side presigned URL approach entirely, since:
+  - R2's raw S3 endpoint (account.r2.cloudflarestorage.com) has TLS
+    handshake failures for some accounts (a known R2 issue).
+  - Cloudflare explicitly does not support presigned PUTs via custom
+    domains (cdn.koda.fyi).
+  - Server-to-server R2 uploads work reliably and have no egress cost.
+
   type is one of: "avatar" | "gallery" | "attachment"
   """
+
   @max_bytes 8 * 1024 * 1024
-  @expires_in 300
   @allowed_content_types ~w(
     image/jpeg image/png image/gif image/webp
     image/svg+xml image/avif
@@ -21,28 +25,20 @@ defmodule Koda.Upload do
   def allowed_content_types, do: @allowed_content_types
   def max_bytes, do: @max_bytes
 
-  def presign(user_id, upload_type, content_type) do
+  @doc """
+  Uploads binary body to R2 and returns {:ok, cdn_url} or {:error, reason}.
+  Called from UploadController which reads the raw request body.
+  """
+  def upload(user_id, upload_type, content_type, body) do
     with :ok <- validate_content_type(content_type),
-         :ok <- validate_upload_type(upload_type) do
+         :ok <- validate_upload_type(upload_type),
+         :ok <- validate_size(body) do
       key     = build_key(user_id, upload_type, content_type)
       cdn_url = "#{cdn_base()}/#{bucket()}/#{key}"
-      config  = ex_aws_config()
 
-      url =
-        ExAws.S3.presigned_url(
-          config,
-          :put,
-          bucket(),
-          key,
-          expires_in: @expires_in,
-          headers: [{"content-type", content_type}]
-        )
-
-      case url do
-        {:ok, upload_url} ->
-          {:ok, %{upload_url: upload_url, cdn_url: cdn_url, key: key}}
-        {:error, reason} ->
-          {:error, reason}
+      case put_object(key, body, content_type) do
+        {:ok, _}         -> {:ok, cdn_url}
+        {:error, reason} -> {:error, reason}
       end
     end
   end
@@ -53,6 +49,17 @@ defmodule Koda.Upload do
 
   defp validate_upload_type(t) do
     if t in ["avatar", "gallery", "attachment"], do: :ok, else: {:error, :invalid_upload_type}
+  end
+
+  defp validate_size(body) when byte_size(body) > @max_bytes, do: {:error, :too_large}
+  defp validate_size(_), do: :ok
+
+  defp put_object(key, body, content_type) do
+    ExAws.S3.put_object(bucket(), key, body,
+      content_type: content_type,
+      acl: :public_read
+    )
+    |> ExAws.request(ex_aws_config())
   end
 
   defp build_key(user_id, upload_type, content_type) do
