@@ -34,7 +34,7 @@ defmodule Koda.Upload do
          :ok <- validate_upload_type(upload_type),
          :ok <- validate_size(body) do
       key     = build_key(user_id, upload_type, content_type)
-      cdn_url = "#{cdn_base()}/#{key}"
+      cdn_url = "#{cdn_base()}/#{bucket()}/#{key}"
 
       case put_object(key, body, content_type) do
         {:ok, _}         -> {:ok, cdn_url}
