@@ -97,6 +97,13 @@ defmodule KodaWeb.Router do
     post   "/members/:member_id/roles/:role_id",         RoleController, :assign
     delete "/members/:member_id/roles/:role_id",         RoleController, :unassign
 
+    # Moderation
+    delete "/channels/:channel_id/messages/:message_id", ModerationController, :delete_message
+    delete "/servers/:server_id/members/:user_id/kick",  ModerationController, :kick_member
+    post   "/servers/:server_id/members/:user_id/ban",   ModerationController, :ban_member
+    delete "/servers/:server_id/members/:user_id/ban",   ModerationController, :unban_member
+    get    "/servers/:server_id/bans",                   ModerationController, :list_bans
+
     # Messages
     get    "/channels/:channel_id/messages",ChannelController, :messages
     post   "/channels/:channel_id/messages",ChannelController, :send_message

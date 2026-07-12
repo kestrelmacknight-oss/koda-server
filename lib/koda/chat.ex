@@ -172,3 +172,15 @@ defmodule Koda.Chat do
     end
   end
 end
+  def delete_message(channel_id, message_id, bucket \\ nil) do
+    b = bucket || Koda.Scylla.month_bucket()
+    cql = "DELETE FROM koda.messages WHERE channel_id = ? AND bucket = ? AND id = ?"
+    case Koda.Scylla.execute(cql, [
+      to_uuid_binary(channel_id),
+      b,
+      to_uuid_binary(message_id)
+    ]) do
+      {:ok, _}         -> :ok
+      {:error, reason} -> {:error, reason}
+    end
+  end

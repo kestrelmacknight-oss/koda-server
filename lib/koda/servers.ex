@@ -376,3 +376,30 @@ defmodule Koda.Servers do
     )
   end
 end
+
+  def ban_member(server_id, user_id) do
+    case get_member(server_id, user_id) do
+      nil    -> {:error, :not_found}
+      member ->
+        member
+        |> Member.changeset(%{is_banned: true})
+        |> Repo.update()
+    end
+  end
+
+  def unban_member(server_id, user_id) do
+    case Repo.get_by(Member, server_id: server_id, user_id: user_id) do
+      nil    -> {:error, :not_found}
+      member ->
+        Repo.delete(member)
+        :ok
+    end
+  end
+
+  def list_bans(server_id) do
+    Repo.all(
+      from m in Member,
+      where: m.server_id == ^server_id and m.is_banned == true,
+      preload: [:user]
+    )
+  end
