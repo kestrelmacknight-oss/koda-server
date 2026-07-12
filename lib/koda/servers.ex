@@ -375,8 +375,6 @@ defmodule Koda.Servers do
       limit:    ^limit
     )
   end
-end
-
   def ban_member(server_id, user_id) do
     case get_member(server_id, user_id) do
       nil    -> {:error, :not_found}
@@ -403,3 +401,4 @@ end
       preload: [:user]
     )
   end
+end
