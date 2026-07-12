@@ -1,50 +1,68 @@
 defmodule Koda.Voice.LiveKit do
-  @moduledoc "LiveKit JWT generation and RoomService API calls."
+  @moduledoc "LiveKit token generation and room management API."
+  require Logger
 
-  alias Koda.Voice.LiveKit.JWT
+  @default_ttl 3600
 
   # -- Token generation --------------------------------------------------------
 
   def generate_token(user, channel_id, opts \\ []) do
+    cfg        = config()
+    api_key    = cfg[:api_key]
+    api_secret = cfg[:api_secret]
+    now        = System.system_time(:second)
     can_publish = Keyword.get(opts, :can_publish, true)
-    room        = room_name(channel_id)
-    cfg         = livekit_config()
 
     claims = %{
-      "video" => %{
+      "exp"  => now + Keyword.get(opts, :ttl, @default_ttl),
+      "nbf"  => now,
+      "iss"  => api_key,
+      "sub"  => user.id,
+      "video"=> %{
+        "room"           => room_name(channel_id),
         "roomJoin"       => true,
-        "room"           => room,
         "canPublish"     => can_publish,
         "canSubscribe"   => true,
         "canPublishData" => true
       },
       "metadata" => Jason.encode!(%{
-        "username" => user.username,
-        "user_id"  => user.id
+        user_id:    user.id,
+        username:   user.username,
+        avatar_url: user.avatar_url
       })
     }
 
-    JWT.sign(cfg[:api_key], cfg[:api_secret], user.id, claims)
+    sign_token(claims, api_secret)
   end
 
-  def room_name(channel_id), do: "koda-#{channel_id}"
+  def generate_admin_token do
+    cfg = config()
+    now = System.system_time(:second)
 
-  def channel_id_from_room("koda-" <> channel_id), do: channel_id
-  def channel_id_from_room(_), do: nil
+    claims = %{
+      "exp"   => now + 300,
+      "nbf"   => now,
+      "iss"   => cfg[:api_key],
+      "sub"   => "koda-server",
+      "video" => %{"roomAdmin" => true, "roomCreate" => true}
+    }
 
-  # -- RoomService API ---------------------------------------------------------
+    sign_token(claims, cfg[:api_secret])
+  end
+
+  # -- Room management ---------------------------------------------------------
 
   def list_participants(channel_id) do
-    call_room_service("ListParticipants", %{room: room_name(channel_id)})
+    api_post("livekit.RoomService/ListParticipants", %{room: room_name(channel_id)})
     |> case do
-      {:ok, %{"participants" => ps}} -> {:ok, ps}
-      {:ok, _}                       -> {:ok, []}
-      err                            -> err
+      {:ok, %{"participants" => p}} -> {:ok, p}
+      {:ok, _}                     -> {:ok, []}
+      err                          -> err
     end
   end
 
   def remove_participant(channel_id, user_id) do
-    call_room_service("RemoveParticipant", %{
+    api_post("livekit.RoomService/RemoveParticipant", %{
       room:     room_name(channel_id),
       identity: user_id
     })
@@ -54,7 +72,7 @@ defmodule Koda.Voice.LiveKit do
   # can_publish: true  = speaker (mic active)
   # can_publish: false = listener (hear only)
   def update_participant_permission(channel_id, user_id, can_publish) do
-    call_room_service("UpdateParticipant", %{
+    api_post("livekit.RoomService/UpdateParticipant", %{
       room:     room_name(channel_id),
       identity: user_id,
       permission: %{
@@ -65,42 +83,74 @@ defmodule Koda.Voice.LiveKit do
     })
   end
 
-  # -- Private -----------------------------------------------------------------
+  # -- Webhook verification ----------------------------------------------------
 
-  defp call_room_service(method, body) do
-    cfg    = livekit_config()
-    url    = "#{internal_url()}/twirp/livekit.RoomService/#{method}"
-    token  = admin_token(cfg)
-
-    case Req.post(url,
-      json:    body,
-      headers: [{"authorization", "Bearer #{token}"}]
-    ) do
-      {:ok, %{status: s, body: b}} when s in 200..299 -> {:ok, b}
-      {:ok, %{status: s, body: b}}                    -> {:error, {s, b}}
-      {:error, reason}                                 -> {:error, reason}
+  def verify_webhook(body, "Bearer " <> token) do
+    case verify_token(token, config()[:api_secret]) do
+      {:ok, _}    -> Jason.decode(body)
+      {:error, _} -> {:error, :invalid_signature}
     end
   end
 
-  defp admin_token(cfg) do
-    claims = %{
-      "video" => %{
-        "roomCreate" => true,
-        "roomList"   => true,
-        "roomAdmin"  => true
-      }
-    }
-    JWT.sign(cfg[:api_key], cfg[:api_secret], "koda-server", claims)
+  def verify_webhook(_, _), do: {:error, :missing_authorization}
+
+  # -- Helpers -----------------------------------------------------------------
+
+  def room_name(channel_id), do: "koda-#{channel_id}"
+
+  def channel_id_from_room("koda-" <> id), do: id
+  def channel_id_from_room(_), do: nil
+
+  # -- Private -----------------------------------------------------------------
+
+  defp api_post(method, body) do
+    cfg   = config()
+    url   = "#{cfg[:url]}/twirp/#{method}"
+    token = generate_admin_token()
+
+    case Req.post(url,
+           json: body,
+           headers: [{"authorization", "Bearer #{token}"}],
+           receive_timeout: 5_000) do
+      {:ok, %{status: 200, body: resp}} -> {:ok, resp}
+      {:ok, %{status: s, body: b}}      ->
+        Logger.warning("[LiveKit] #{method} returned #{s}: #{inspect(b)}")
+        {:error, {:http_error, s}}
+      {:error, reason} ->
+        Logger.error("[LiveKit] #{method} failed: #{inspect(reason)}")
+        {:error, reason}
+    end
   end
 
-  defp livekit_config do
-    Application.get_env(:koda, :livekit, [])
+  defp sign_token(claims, secret) do
+    h = %{"alg" => "HS256", "typ" => "JWT"} |> Jason.encode!() |> Base.url_encode64(padding: false)
+    p = claims |> Jason.encode!() |> Base.url_encode64(padding: false)
+    unsigned = "#{h}.#{p}"
+    sig = :crypto.mac(:hmac, :sha256, secret, unsigned) |> Base.url_encode64(padding: false)
+    "#{unsigned}.#{sig}"
   end
 
-  defp internal_url do
-    # Use internal LiveKit URL for server-to-server RoomService calls.
-    # Falls back to public URL if internal isn't set.
-    cfg = livekit_config()
-    Keyword.get(cfg, :url, Keyword.get(cfg, :public_url, "http://koda-livekit.internal:7880"))
+  defp verify_token(token, secret) do
+    case String.split(token, ".") do
+      [h, p, sig] ->
+        unsigned = "#{h}.#{p}"
+        expected = :crypto.mac(:hmac, :sha256, secret, unsigned) |> Base.url_encode64(padding: false)
+        if Plug.Crypto.secure_compare(expected, sig) do
+          claims = p |> Base.url_decode64!(padding: false) |> Jason.decode!()
+          {:ok, claims}
+        else
+          {:error, :invalid_signature}
+        end
+      _ -> {:error, :malformed}
+    end
+  end
+
+  defp config do
+    cfg = Application.get_env(:koda, :livekit, [])
+    [
+      url:        Keyword.get(cfg, :url,        "http://localhost:7880"),
+      api_key:    Keyword.get(cfg, :api_key,    "devkey"),
+      api_secret: Keyword.get(cfg, :api_secret, "devsecret")
+    ]
   end
 end
