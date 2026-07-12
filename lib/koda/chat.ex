@@ -171,7 +171,6 @@ defmodule Koda.Chat do
         %{}
     end
   end
-end
   def delete_message(channel_id, message_id, bucket \\ nil) do
     b = bucket || Koda.Scylla.month_bucket()
     cql = "DELETE FROM koda.messages WHERE channel_id = ? AND bucket = ? AND id = ?"
@@ -184,3 +183,4 @@ end
       {:error, reason} -> {:error, reason}
     end
   end
+end
