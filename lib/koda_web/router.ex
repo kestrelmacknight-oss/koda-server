@@ -39,6 +39,11 @@ defmodule KodaWeb.Router do
     post   "/auth/verify_email/resend",     AuthController, :resend_verification
     post   "/auth/totp/setup",              AuthController, :totp_setup
 
+    # Key bundles (E2EE / KCP)
+    put    "/keys/bundle",              KeyBundleController, :put
+    get    "/keys/bundle/status",       KeyBundleController, :status
+    get    "/keys/bundle/:user_id",     KeyBundleController, :get
+
     # TEMPORARY -- remove once Scylla connection issue is resolved
     post   "/auth/totp/verify",             AuthController, :totp_verify
     get    "/auth/keys",                    AuthController, :get_keys
