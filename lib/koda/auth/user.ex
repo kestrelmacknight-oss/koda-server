@@ -19,6 +19,7 @@ defmodule Koda.Auth.User do
     field :must_change_password, :boolean, default: false
     field :email_verified,       :boolean, default: false
     field :settings,             :map, default: %{}
+    field :flags,               :map, default: %{}
     timestamps(type: :utc_datetime)
   end
   def registration_changeset(user, attrs) do
@@ -85,4 +86,9 @@ defmodule Koda.Auth.User do
   defp downcase_email(changeset) do
     update_change(changeset, :email, &String.downcase/1)
   end
+  def flags_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:flags])
+  end
+
 end

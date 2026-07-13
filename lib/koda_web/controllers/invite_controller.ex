@@ -1,57 +1,160 @@
 defmodule KodaWeb.InviteController do
   use KodaWeb, :controller
-  alias Koda.Invites
+  alias Koda.{Invites, Servers}
 
-  def show(conn, %{"code" => code}) do
-    case Invites.get_by_code(code) do
-      nil    -> conn |> put_status(404) |> json(%{error: "Invalid invite"})
-      invite ->
-        json(conn, %{
-          valid:        true,
-          server:       %{
-            id:           invite.server.id,
-            name:         invite.server.name,
-            description:  invite.server.description,
-            icon_url:     invite.server.icon_url,
-            member_count: invite.server.member_count
-          }
-        })
-    end
-  end
-
-  def index(conn, %{"server_id" => server_id}) do
-    invites = Invites.list_server_invites(server_id)
-    json(conn, %{invites: Enum.map(invites, fn i ->
-      %{id: i.id, code: i.code, is_permanent: i.is_permanent,
-        uses: i.uses, max_uses: i.max_uses, expires_at: i.expires_at}
-    end)})
-  end
+  # -- Server invites ----------------------------------------------------------
 
   def create(conn, %{"server_id" => server_id} = params) do
     user = Guardian.Plug.current_resource(conn)
-    opts = []
-    opts = if h = params["expires_in_hours"], do: Keyword.put(opts, :expires_in_hours, h), else: opts
-    opts = if m = params["max_uses"],         do: Keyword.put(opts, :max_uses, m), else: opts
 
-    case Invites.create_invite(server_id, user.id, opts) do
-      {:ok, invite} -> json(conn, %{invite: %{id: invite.id, code: invite.code}})
-      {:error, _}   -> conn |> put_status(422) |> json(%{error: "Could not create invite"})
+    if Servers.owner?(server_id, user.id) or
+       Servers.member_can?(server_id, user.id, "manage_server") do
+      opts = []
+      opts = if params["max_uses"],  do: [{:max_uses, params["max_uses"]}  | opts], else: opts
+      opts = if params["expires_at"], do: [{:expires_at, parse_dt(params["expires_at"])} | opts], else: opts
+
+      case Invites.create_invite(server_id, user.id, opts) do
+        {:ok, invite} ->
+          conn |> put_status(201) |> json(%{invite: invite_json(invite)})
+        {:error, cs} ->
+          conn |> put_status(422) |> json(%{error: format_errors(cs)})
+      end
+    else
+      conn |> put_status(403) |> json(%{error: "Not authorized"})
     end
   end
 
-  def join(conn, %{"code" => code}) do
+  def list(conn, %{"server_id" => server_id}) do
     user = Guardian.Plug.current_resource(conn)
-    case Invites.use_invite(code, user.id) do
-      {:ok, invite}              -> json(conn, %{server_id: invite.server_id})
-      {:error, :already_member}  -> conn |> put_status(422) |> json(%{error: "Already a member"})
-      {:error, :expired}         -> conn |> put_status(422) |> json(%{error: "Invite expired"})
-      {:error, :max_uses_reached}-> conn |> put_status(422) |> json(%{error: "Invite is full"})
-      {:error, :not_found}       -> conn |> put_status(404) |> json(%{error: "Invalid invite"})
+
+    if Servers.owner?(server_id, user.id) or
+       Servers.member_can?(server_id, user.id, "manage_server") do
+      invites = Invites.list_invites(server_id)
+      json(conn, %{invites: Enum.map(invites, &invite_json/1)})
+    else
+      conn |> put_status(403) |> json(%{error: "Not authorized"})
     end
   end
 
-  def delete(conn, %{"id" => id}) do
-    Invites.delete_invite(id)
-    json(conn, %{ok: true})
+  def delete(conn, %{"server_id" => _server_id, "code" => code}) do
+    user = Guardian.Plug.current_resource(conn)
+
+    case Invites.get_invite_by_code(code) do
+      nil ->
+        conn |> put_status(404) |> json(%{error: "Invite not found"})
+      invite ->
+        if Servers.owner?(invite.server_id, user.id) or
+           Servers.member_can?(invite.server_id, user.id, "manage_server") do
+          Invites.delete_invite(invite)
+          json(conn, %{ok: true})
+        else
+          conn |> put_status(403) |> json(%{error: "Not authorized"})
+        end
+    end
+  end
+
+  # -- Invite redemption (joining a server via code) ---------------------------
+
+  def redeem(conn, %{"code" => code}) do
+    user = Guardian.Plug.current_resource(conn)
+
+    case Invites.redeem_invite(code, user.id) do
+      {:ok, server} ->
+        json(conn, %{ok: true, server: %{
+          id:   server.id,
+          name: server.name
+        }})
+      {:error, :invalid_code}    -> conn |> put_status(404) |> json(%{error: "Invalid invite code"})
+      {:error, :expired}         -> conn |> put_status(410) |> json(%{error: "This invite has expired"})
+      {:error, :max_uses_reached}-> conn |> put_status(410) |> json(%{error: "This invite has reached its maximum uses"})
+      {:error, _}                -> conn |> put_status(500) |> json(%{error: "Could not join server"})
+    end
+  end
+
+  # -- Backer code redemption --------------------------------------------------
+
+  def redeem_backer(conn, %{"code" => code}) do
+    user = Guardian.Plug.current_resource(conn)
+
+    case Invites.redeem_backer_code(code, user.id) do
+      {:ok, _} ->
+        json(conn, %{ok: true, message: "Code redeemed successfully"})
+      {:error, :invalid_code}    -> conn |> put_status(404) |> json(%{error: "Invalid code"})
+      {:error, :already_redeemed}-> conn |> put_status(409) |> json(%{error: "You have already redeemed this code"})
+      {:error, :expired}         -> conn |> put_status(410) |> json(%{error: "This code has expired"})
+      {:error, :max_uses_reached}-> conn |> put_status(410) |> json(%{error: "This code has reached its maximum uses"})
+      {:error, _}                -> conn |> put_status(500) |> json(%{error: "Could not redeem code"})
+    end
+  end
+
+  # -- Admin: backer code management -------------------------------------------
+
+  def create_backer(conn, params) do
+    user = Guardian.Plug.current_resource(conn)
+
+    unless user.is_admin do
+      conn |> put_status(403) |> json(%{error: "Admin only"})
+    else
+      attrs = [
+        flags:      params["flags"]      || %{},
+        note:       params["note"],
+        max_uses:   params["max_uses"],
+        code:       params["code"],
+        expires_at: params["expires_at"] && parse_dt(params["expires_at"])
+      ]
+
+      case Invites.create_backer_code(user.id, attrs) do
+        {:ok, code} ->
+          conn |> put_status(201) |> json(%{backer_code: %{
+            id:       code.id,
+            code:     code.code,
+            flags:    code.flags,
+            note:     code.note,
+            max_uses: code.max_uses,
+            uses:     code.uses
+          }})
+        {:error, cs} ->
+          conn |> put_status(422) |> json(%{error: format_errors(cs)})
+      end
+    end
+  end
+
+  def list_backer(conn, _params) do
+    user = Guardian.Plug.current_resource(conn)
+
+    unless user.is_admin do
+      conn |> put_status(403) |> json(%{error: "Admin only"})
+    else
+      codes = Invites.list_backer_codes()
+      json(conn, %{backer_codes: Enum.map(codes, fn c ->
+        %{id: c.id, code: c.code, flags: c.flags,
+          note: c.note, uses: c.uses, max_uses: c.max_uses}
+      end)})
+    end
+  end
+
+  # -- Helpers -----------------------------------------------------------------
+
+  defp invite_json(invite) do
+    %{
+      code:       invite.code,
+      server_id:  invite.server_id,
+      uses:       invite.uses,
+      max_uses:   invite.max_uses,
+      expires_at: invite.expires_at,
+      url:        "https://koda.fyi/invite/#{invite.code}"
+    }
+  end
+
+  defp parse_dt(nil), do: nil
+  defp parse_dt(s) when is_binary(s) do
+    case DateTime.from_iso8601(s) do
+      {:ok, dt, _} -> dt
+      _            -> nil
+    end
+  end
+
+  defp format_errors(cs) do
+    Ecto.Changeset.traverse_errors(cs, fn {msg, _} -> msg end)
   end
 end

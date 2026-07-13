@@ -44,11 +44,16 @@ defmodule KodaWeb.Router do
     get    "/keys/bundle/status",       KeyBundleController, :status
     get    "/keys/bundle/:user_id",     KeyBundleController, :get
 
-    # TEMPORARY -- remove once Scylla connection issue is resolved
-    post   "/auth/totp/verify",             AuthController, :totp_verify
-    get    "/auth/keys",                    AuthController, :get_keys
-    put    "/auth/keys",                    AuthController, :upload_keys
-    get    "/users/:id/keys",               AuthController, :get_user_keys
+    # Invites
+    post   "/servers/:server_id/invites",        InviteController, :create
+    get    "/servers/:server_id/invites",        InviteController, :list
+    delete "/servers/:server_id/invites/:code",  InviteController, :delete
+    post   "/invites/:code/redeem",              InviteController, :redeem
+
+    # Backer codes (admin only)
+    post   "/backer_codes",                      InviteController, :create_backer
+    get    "/backer_codes",                      InviteController, :list_backer
+    post   "/backer_codes/:code/redeem",         InviteController, :redeem_backer
 
     # User settings
     get    "/users/me/settings",            UserController, :get_settings
