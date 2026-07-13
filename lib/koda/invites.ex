@@ -47,7 +47,7 @@ defmodule Koda.Invites do
       field :max_uses,   :integer
       field :uses,       :integer, default: 0
       field :expires_at, :utc_datetime
-      belongs_to :created_by, Koda.Auth.User, foreign_key: :created_by
+      belongs_to :creator, Koda.Auth.User, foreign_key: :created_by
       timestamps(type: :utc_datetime)
     end
 
