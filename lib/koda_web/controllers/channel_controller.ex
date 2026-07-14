@@ -71,11 +71,12 @@ defmodule KodaWeb.ChannelController do
     end
   end
 
-  def send_message(conn, %{"channel_id" => channel_id, "content" => content}) do
+  def send_message(conn, %{"channel_id" => channel_id, "content" => content} = params) do
     user    = Guardian.Plug.current_resource(conn)
     channel = Servers.get_channel(channel_id)
     if channel && Servers.get_member(channel.server_id, user.id) do
-      case Chat.send_message(channel_id, user.id, content, sender_username: user.username) do
+      encrypted = Map.get(params, "encrypted", false)
+      case Chat.send_message(channel_id, user.id, content, sender_username: user.username, encrypted: encrypted) do
         {:ok, msg}   -> conn |> put_status(201) |> json(%{message: msg})
         {:error, _}  -> conn |> put_status(500) |> json(%{error: "Send failed"})
       end
