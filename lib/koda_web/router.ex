@@ -59,6 +59,7 @@ defmodule KodaWeb.Router do
     # Backer codes (admin only)
     post   "/backer_codes",                      InviteController, :create_backer
     get    "/backer_codes",                      InviteController, :list_backer
+    get    "/admin/users/search",                 AdminController, :search_users
     post   "/backer_codes/:code/redeem",         InviteController, :redeem_backer
 
     # User settings
