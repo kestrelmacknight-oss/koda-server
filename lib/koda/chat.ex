@@ -40,11 +40,15 @@ defmodule Koda.Chat do
       now
     ]) do
       {:ok, _} ->
+        avatar_url = case Koda.Repo.get(Koda.Auth.User, sender_id) do
+          %{avatar_url: url} -> url
+          _ -> nil
+        end
         msg = %{
           id:          message_id,
           channel_id:  channel_id,
           sender_id:   sender_id,
-          author:      %{id: sender_id, username: sender_username},
+          author:      %{id: sender_id, username: sender_username, avatar_url: avatar_url},
           content:     content,
           encrypted:   encrypted,
           inserted_at: DateTime.utc_now() |> DateTime.to_iso8601()
