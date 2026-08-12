@@ -1,6 +1,6 @@
 defmodule KodaWeb.DmController do
   use KodaWeb, :controller
-  alias Koda.DirectMessages
+  alias Koda.{Chat, DirectMessages}
 
   def list_conversations(conn, _) do
     user = Guardian.Plug.current_resource(conn)
@@ -23,10 +23,8 @@ defmodule KodaWeb.DmController do
     user  = Guardian.Plug.current_resource(conn)
     convo = DirectMessages.get_conversation(conv_id, user.id)
     if convo do
-      case DirectMessages.get_messages(conv_id, bucket: bucket) do
-        {:ok, msgs} -> json(conn, %{messages: msgs})
-        {:error, _} -> json(conn, %{messages: []})
-      end
+      msgs = Chat.get_dm_messages(conv_id)
+      json(conn, %{messages: msgs})
     else
       conn |> put_status(403) |> json(%{error: "Not authorized"})
     end
