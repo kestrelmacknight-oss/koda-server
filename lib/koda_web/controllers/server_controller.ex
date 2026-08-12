@@ -90,4 +90,11 @@ defmodule KodaWeb.ServerController do
       end)
     end)
   end
+  def leave(conn, %{"server_id" => server_id}) do
+    user = Guardian.Plug.current_resource(conn)
+    case Koda.Servers.remove_member(server_id, user.id) do
+      :ok         -> json(conn, %{ok: true})
+      {:error, _} -> conn |> put_status(404) |> json(%{error: "Not a member"})
+    end
+  end
 end

@@ -54,6 +54,7 @@ defmodule KodaWeb.Router do
     post   "/servers/:server_id/invites",        InviteController, :create
     get    "/servers/:server_id/invites",        InviteController, :list
     delete "/servers/:server_id/invites/:code",  InviteController, :delete
+    delete "/servers/:server_id/leave", ServerController, :leave
     post   "/invites/:code/redeem",              InviteController, :redeem
 
     # Backer codes (admin only)

@@ -23,7 +23,6 @@ defmodule KodaWeb.DmController do
     user  = Guardian.Plug.current_resource(conn)
     convo = DirectMessages.get_conversation(conv_id, user.id)
     if convo do
-      bucket = Map.get(params, "bucket", Koda.Scylla.month_bucket())
       case DirectMessages.get_messages(conv_id, bucket: bucket) do
         {:ok, msgs} -> json(conn, %{messages: msgs})
         {:error, _} -> json(conn, %{messages: []})

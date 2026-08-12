@@ -20,9 +20,6 @@ defmodule Koda.Application do
       {Oban, Application.fetch_env!(:koda, Oban)},
       # DNS clustering (multi-node Fly deployments)
       {DNSCluster, query: Application.get_env(:koda, :dns_cluster_query) || :ignore},
-      # ScyllaDB connection pool
-      Koda.Scylla,
-      Koda.Scylla.Prepared,
       # Web endpoint
       KodaWeb.Endpoint
     ]
@@ -30,9 +27,7 @@ defmodule Koda.Application do
     opts = [strategy: :one_for_one, name: Koda.Supervisor]
     result = Supervisor.start_link(children, opts)
 
-    # Apply ScyllaDB schema on first boot (idempotent)
     if Application.get_env(:koda, :env) == :prod do
-      Koda.Scylla.Schema.setup!()
     end
 
     result

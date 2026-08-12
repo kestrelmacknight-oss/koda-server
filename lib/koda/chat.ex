@@ -1,46 +1,75 @@
 defmodule Koda.Chat do
-  @moduledoc "Message storage via ScyllaDB."
-  require Logger
+  @moduledoc """
+  Chat message storage using PostgreSQL via Ecto.
+  Replaces the previous ScyllaDB implementation.
+  """
+  import Ecto.Query
+  alias Koda.Repo
 
-  @page_size 50
+  # ── Schemas ──────────────────────────────────────────────────────────────
 
-  # CQL's uuid/timeuuid types need the 16-byte binary wire format, not
-  # the human-readable dashed string ("8ecdd2b9-...") that arrives from
-  # URL params, JSON bodies, or UUID.uuid1()/uuid4() calls. Without this
-  # conversion, Xandra raises FunctionClauseError trying to encode the
-  # string directly. Ecto.UUID.dump!/1 does exactly this conversion --
-  # it's already a dependency for the Postgres side of the app, so no
-  # new dependency needed.
-  defp to_uuid_binary(uuid_string) when is_binary(uuid_string) do
-    Ecto.UUID.dump!(uuid_string)
+  defmodule Message do
+    use Ecto.Schema
+    import Ecto.Changeset
+    @primary_key {:id, :binary_id, autogenerate: true}
+    @foreign_key_type :binary_id
+
+    schema "messages" do
+      field :channel_id,  :binary_id
+      field :sender_id,   :binary_id
+      field :content,     :string
+      field :encrypted,   :boolean, default: false
+      field :inserted_at, :utc_datetime
+    end
+
+    def changeset(m, attrs) do
+      m
+      |> cast(attrs, [:id, :channel_id, :sender_id, :content, :encrypted, :inserted_at])
+      |> validate_required([:channel_id, :sender_id, :content])
+    end
   end
 
-  # -- Channel messages --------------------------------------------------------
+  defmodule DmMessage do
+    use Ecto.Schema
+    import Ecto.Changeset
+    @primary_key {:id, :binary_id, autogenerate: true}
+    @foreign_key_type :binary_id
+
+    schema "dm_messages" do
+      field :conversation_id, :string
+      field :sender_id,       :binary_id
+      field :content,         :string
+      field :encrypted,       :boolean, default: false
+      field :inserted_at,     :utc_datetime
+    end
+
+    def changeset(m, attrs) do
+      m
+      |> cast(attrs, [:id, :conversation_id, :sender_id, :content, :encrypted, :inserted_at])
+      |> validate_required([:conversation_id, :sender_id, :content])
+    end
+  end
+
+  # ── Channel messages ──────────────────────────────────────────────────────
 
   def send_message(channel_id, sender_id, content, opts \\ []) do
-    bucket          = Koda.Scylla.month_bucket()
-    message_id      = UUID.uuid1()
-    encrypted       = Keyword.get(opts, :encrypted, true)
-    sender_username = Keyword.get(opts, :sender_username)
-    now             = DateTime.utc_now() |> DateTime.to_unix(:millisecond)
+    sender_username = Keyword.get(opts, :sender_username, sender_id)
+    encrypted       = Keyword.get(opts, :encrypted, false)
+    message_id      = Ecto.UUID.generate()
+    now             = DateTime.utc_now() |> DateTime.truncate(:second)
 
-    cql = """
-    INSERT INTO koda.messages
-      (channel_id, bucket, id, sender_id, content, encrypted, inserted_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    """
-
-    case Koda.Scylla.execute(cql, [
-      to_uuid_binary(channel_id),
-      bucket,
-      to_uuid_binary(message_id),
-      to_uuid_binary(sender_id),
-      content,
-      encrypted,
-      now
-    ]) do
+    case %Message{}
+         |> Message.changeset(%{
+              id:          message_id,
+              channel_id:  channel_id,
+              sender_id:   sender_id,
+              content:     content,
+              encrypted:   encrypted,
+              inserted_at: now
+            })
+         |> Repo.insert() do
       {:ok, _} ->
-        avatar_url = case Koda.Repo.get(Koda.Auth.User, sender_id) do
+        avatar_url = case Repo.get(Koda.Auth.User, sender_id) do
           %{avatar_url: url} -> url
           _ -> nil
         end
@@ -51,53 +80,67 @@ defmodule Koda.Chat do
           author:      %{id: sender_id, username: sender_username, avatar_url: avatar_url},
           content:     content,
           encrypted:   encrypted,
-          inserted_at: DateTime.utc_now() |> DateTime.to_iso8601()
+          inserted_at: DateTime.to_iso8601(now)
         }
         Phoenix.PubSub.broadcast(Koda.PubSub, "channel:#{channel_id}", {:new_message, msg})
         {:ok, msg}
-
       {:error, reason} ->
-        Logger.error("[Chat] Failed to insert message: #{inspect(reason)}")
         {:error, reason}
     end
   end
 
   def get_messages(channel_id, opts \\ []) do
-    bucket = Keyword.get(opts, :bucket, Koda.Scylla.month_bucket())
-    limit  = Keyword.get(opts, :limit, @page_size)
+    limit = Keyword.get(opts, :limit, 50)
 
-    cql = "SELECT * FROM koda.messages WHERE channel_id = ? AND bucket = ? ORDER BY id DESC LIMIT ?"
+    messages =
+      from(m in Message,
+        where: m.channel_id == ^channel_id,
+        order_by: [desc: m.inserted_at],
+        limit: ^limit
+      )
+      |> Repo.all()
 
-    case Koda.Scylla.execute(cql, [to_uuid_binary(channel_id), bucket, limit]) do
-      {:ok, page}     -> {:ok, enrich_with_authors(Enum.to_list(page))}
-      {:error, reason}-> {:error, reason}
+    enrich_with_authors(Enum.map(messages, fn m ->
+      %{
+        "id"          => m.id,
+        "channel_id"  => m.channel_id,
+        "sender_id"   => m.sender_id,
+        "content"     => m.content,
+        "encrypted"   => m.encrypted,
+        "inserted_at" => DateTime.to_iso8601(m.inserted_at)
+      }
+    end))
+  end
+
+  def delete_message(channel_id, message_id) do
+    case Repo.get_by(Message, id: message_id, channel_id: channel_id) do
+      nil -> {:error, :not_found}
+      msg ->
+        case Repo.delete(msg) do
+          {:ok, _}    -> :ok
+          {:error, e} -> {:error, e}
+        end
     end
   end
 
-  # -- DM messages ------------------------------------------------------------
+  # ── DM messages ───────────────────────────────────────────────────────────
 
   def send_dm_message(conversation_id, sender_id, content, opts \\ []) do
-    bucket          = Koda.Scylla.month_bucket()
-    message_id      = UUID.uuid1()
-    encrypted       = Keyword.get(opts, :encrypted, true)
-    sender_username = Keyword.get(opts, :sender_username)
-    now             = DateTime.utc_now() |> DateTime.to_unix(:millisecond)
+    sender_username = Keyword.get(opts, :sender_username, sender_id)
+    encrypted       = Keyword.get(opts, :encrypted, false)
+    message_id      = Ecto.UUID.generate()
+    now             = DateTime.utc_now() |> DateTime.truncate(:second)
 
-    cql = """
-    INSERT INTO koda.dm_messages
-      (conversation_id, bucket, id, sender_id, content, encrypted, inserted_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    """
-
-    case Koda.Scylla.execute(cql, [
-      to_uuid_binary(conversation_id),
-      bucket,
-      to_uuid_binary(message_id),
-      to_uuid_binary(sender_id),
-      content,
-      encrypted,
-      now
-    ]) do
+    case %DmMessage{}
+         |> DmMessage.changeset(%{
+              id:              message_id,
+              conversation_id: conversation_id,
+              sender_id:       sender_id,
+              content:         content,
+              encrypted:       encrypted,
+              inserted_at:     now
+            })
+         |> Repo.insert() do
       {:ok, _} ->
         msg = %{
           id:              message_id,
@@ -106,45 +149,55 @@ defmodule Koda.Chat do
           author:          %{id: sender_id, username: sender_username},
           content:         content,
           encrypted:       encrypted,
-          inserted_at:     DateTime.utc_now() |> DateTime.to_iso8601()
+          inserted_at:     DateTime.to_iso8601(now)
         }
         Phoenix.PubSub.broadcast(Koda.PubSub, "dm:#{conversation_id}", {:new_message, msg})
         {:ok, msg}
-
       {:error, reason} ->
         {:error, reason}
     end
   end
 
   def get_dm_messages(conversation_id, opts \\ []) do
-    bucket = Keyword.get(opts, :bucket, Koda.Scylla.month_bucket())
-    limit  = Keyword.get(opts, :limit, @page_size)
+    limit = Keyword.get(opts, :limit, 50)
 
-    cql = "SELECT * FROM koda.dm_messages WHERE conversation_id = ? AND bucket = ? ORDER BY id DESC LIMIT ?"
+    messages =
+      from(m in DmMessage,
+        where: m.conversation_id == ^conversation_id,
+        order_by: [desc: m.inserted_at],
+        limit: ^limit
+      )
+      |> Repo.all()
 
-    case Koda.Scylla.execute(cql, [to_uuid_binary(conversation_id), bucket, limit]) do
-      {:ok, page}      -> {:ok, enrich_with_authors(Enum.to_list(page))}
-      {:error, reason} -> {:error, reason}
-    end
+    enrich_with_authors(Enum.map(messages, fn m ->
+      %{
+        "id"              => m.id,
+        "conversation_id" => m.conversation_id,
+        "sender_id"       => m.sender_id,
+        "content"         => m.content,
+        "encrypted"       => m.encrypted,
+        "inserted_at"     => DateTime.to_iso8601(m.inserted_at)
+      }
+    end))
   end
 
-  # -- Reactions --------------------------------------------------------------
+  # ── Reactions ─────────────────────────────────────────────────────────────
 
   def add_reaction(message_id, emoji, user_id) do
-    cql = "INSERT INTO koda.message_reactions (message_id, emoji, user_id) VALUES (?, ?, ?)"
-    Koda.Scylla.execute(cql, [to_uuid_binary(message_id), emoji, to_uuid_binary(user_id)])
+    Repo.query(
+      "INSERT INTO message_reactions (id, message_id, emoji, user_id) VALUES (gen_random_uuid(), $1::uuid, $2, $3::uuid) ON CONFLICT DO NOTHING",
+      [message_id, emoji, user_id]
+    )
   end
 
   def remove_reaction(message_id, emoji, user_id) do
-    cql = "DELETE FROM koda.message_reactions WHERE message_id = ? AND emoji = ? AND user_id = ?"
-    Koda.Scylla.execute(cql, [to_uuid_binary(message_id), emoji, to_uuid_binary(user_id)])
+    Repo.query(
+      "DELETE FROM message_reactions WHERE message_id = $1::uuid AND emoji = $2 AND user_id = $3::uuid",
+      [message_id, emoji, user_id]
+    )
   end
 
-  # -- Author enrichment --------------------------------------------------------
-  #
-  # Scylla only stores sender_id -- it has no username. History fetches
-  # need one batched Postgres lookup across every distinct sender_id in
-  # the page, rather than a query per message.
+  # ── Author enrichment ─────────────────────────────────────────────────────
 
   defp enrich_with_authors(msgs) do
     sender_ids =
@@ -153,38 +206,24 @@ defmodule Koda.Chat do
       |> Enum.reject(&is_nil/1)
       |> Enum.uniq()
 
-    usernames = fetch_usernames(sender_ids)
+    users =
+      from(u in Koda.Auth.User,
+        where: u.id in ^sender_ids,
+        select: {u.id, u.username, u.avatar_url}
+      )
+      |> Repo.all()
+      |> Map.new(fn {id, username, avatar_url} ->
+           {Ecto.UUID.cast!(id), %{username: username, avatar_url: avatar_url}}
+         end)
 
     Enum.map(msgs, fn msg ->
       sender_id = msg["sender_id"]
-      info = Map.get(usernames, sender_id) || %{}
-      Map.put(msg, "author", %{"id" => sender_id, "username" => info[:username], "avatar_url" => info[:avatar_url]})
+      info = Map.get(users, sender_id, %{username: sender_id, avatar_url: nil})
+      Map.put(msg, "author", %{
+        "id"         => sender_id,
+        "username"   => info.username,
+        "avatar_url" => info.avatar_url
+      })
     end)
-  end
-
-  defp fetch_usernames([]), do: %{}
-  defp fetch_usernames(sender_ids) do
-    binary_ids = Enum.map(sender_ids, &to_uuid_binary/1)
-
-    case Koda.Repo.query("SELECT id, username, avatar_url FROM users WHERE id = ANY($1::uuid[])", [binary_ids]) do
-      {:ok, %{rows: rows}} ->
-        Map.new(rows, fn [id, username, avatar_url] -> {Ecto.UUID.load!(id), %{username: username, avatar_url: avatar_url}} end)
-
-      {:error, reason} ->
-        Logger.error("[Chat] Failed to fetch usernames: #{inspect(reason)}")
-        %{}
-    end
-  end
-  def delete_message(channel_id, message_id, bucket \\ nil) do
-    b = bucket || Koda.Scylla.month_bucket()
-    cql = "DELETE FROM koda.messages WHERE channel_id = ? AND bucket = ? AND id = ?"
-    case Koda.Scylla.execute(cql, [
-      to_uuid_binary(channel_id),
-      b,
-      to_uuid_binary(message_id)
-    ]) do
-      {:ok, _}         -> :ok
-      {:error, reason} -> {:error, reason}
-    end
   end
 end
