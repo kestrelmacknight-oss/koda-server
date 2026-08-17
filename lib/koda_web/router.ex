@@ -13,6 +13,7 @@ defmodule KodaWeb.Router do
   scope "/api/v1", KodaWeb do
     pipe_through :api
 
+    get  "/version",              VersionController, :index
     # Auth
     post "/auth/register",         AuthController, :register
     post "/auth/login",            AuthController, :login
