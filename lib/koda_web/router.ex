@@ -51,6 +51,9 @@ defmodule KodaWeb.Router do
     put    "/auth/keys",                    AuthController, :upload_keys
     get    "/users/:id/keys",               AuthController, :get_user_keys
 
+    post "/import/discord/preview", ImportController, :preview
+    post "/servers/:server_id/import/discord", ImportController, :apply
+
     # Invites
     post   "/servers/:server_id/invites",        InviteController, :create
     get    "/servers/:server_id/invites",        InviteController, :list
