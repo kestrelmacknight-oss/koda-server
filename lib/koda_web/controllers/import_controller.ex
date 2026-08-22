@@ -1,4 +1,5 @@
 defmodule KodaWeb.ImportController do
+  import Bitwise
   use KodaWeb, :controller
   alias Koda.{Servers, Repo}
   import Ecto.Query
