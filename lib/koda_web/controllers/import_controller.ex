@@ -208,5 +208,5 @@ defmodule KodaWeb.ImportController do
     }
   end
 
-  defp bit_set?(bits, flag), do: Bitwise.band(bits, flag) != 0
+  defp bit_set?(bits, flag), do: (bits &&& flag) != 0
 end
