@@ -122,15 +122,15 @@ defmodule KodaWeb.ImportController do
     url = "https://discord.com/api/v10/guilds/templates/#{String.trim(code)}"
     headers = [{"User-Agent", "Koda/1.0"}, {"Content-Type", "application/json"}]
 
-    case :httpc.request(:get, {String.to_charlist(url), headers}, [], []) do
-      {:ok, {{_, 200, _}, _, body}} ->
-        case Jason.decode(List.to_string(body)) do
+    case :hackney.get(url, headers, "", [with_body: true, follow_redirect: true]) do
+      {:ok, 200, _headers, body} ->
+        case Jason.decode(body) do
           {:ok, data} -> {:ok, data}
           _           -> {:error, "Failed to parse Discord response"}
         end
-      {:ok, {{_, 404, _}, _, _}} ->
+      {:ok, 404, _, _} ->
         {:error, "Template not found. Check the code and try again."}
-      {:ok, {{_, status, _}, _, _}} ->
+      {:ok, status, _, _} ->
         {:error, "Discord API returned status #{status}"}
       {:error, reason} ->
         {:error, "Network error: #{inspect(reason)}"}
