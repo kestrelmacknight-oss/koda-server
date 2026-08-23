@@ -16,7 +16,7 @@ defmodule Koda.Notifications do
       field :data,  :map, default: %{}
       field :read,  :boolean, default: false
       belongs_to :user, Koda.Auth.User
-      timestamps(type: :utc_datetime, updated_at: false)
+      timestamps(type: :utc_datetime_usec, updated_at: false)
     end
 
     def changeset(n, attrs) do

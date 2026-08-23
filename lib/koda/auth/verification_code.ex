@@ -10,6 +10,6 @@ defmodule Koda.Auth.VerificationCode do
     field :type,       :string
     field :used,       :boolean, default: false
     field :expires_at, :utc_datetime
-    timestamps(type: :utc_datetime, updated_at: false)
+    timestamps(type: :utc_datetime_usec, updated_at: false)
   end
 end

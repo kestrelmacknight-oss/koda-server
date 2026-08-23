@@ -8,7 +8,7 @@ defmodule Koda.Servers.MemberRole do
   schema "member_roles" do
     belongs_to :member, Koda.Servers.Member
     belongs_to :role,   Koda.Servers.Role
-    timestamps(type: :utc_datetime, updated_at: false)
+    timestamps(type: :utc_datetime_usec, updated_at: false)
   end
 
   def changeset(member_role, attrs) do
