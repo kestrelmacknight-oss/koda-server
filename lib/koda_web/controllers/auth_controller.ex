@@ -74,8 +74,8 @@ defmodule KodaWeb.AuthController do
 
   def verify_email(conn, %{"user_id" => user_id, "code" => code}) do
     case Auth.verify_email(user_id, code) do
-      {:ok, _} ->
-        Koda.Email.send_welcome(user)
+      {:ok, user} ->
+        Task.start(fn -> Koda.Email.send_welcome(user) end)
         json(conn, %{message: "Email verified"})
       {:error, :invalid_or_expired_code} ->
         conn |> put_status(422) |> json(%{error: "Invalid or expired code"})
