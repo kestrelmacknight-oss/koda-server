@@ -5,7 +5,12 @@ defmodule KodaWeb.AuthController do
   def register(conn, params) do
     case Auth.create_user(params) do
       {:ok, user} ->
-        Task.start(fn -> Auth.send_verification_email(user) end)
+        Task.start(fn ->
+          case Auth.send_verification_email(user) do
+            {:ok, _} -> require Logger; Logger.info("[Email] Verification sent to #{user.email}")
+            {:error, e} -> require Logger; Logger.error("[Email] Failed: #{inspect(e)}")
+          end
+        end)
         json(conn, %{
           message: "Account created. Check your email for a verification code.",
           user_id: user.id
