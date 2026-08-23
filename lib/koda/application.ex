@@ -16,6 +16,7 @@ defmodule Koda.Application do
       KodaWeb.Presence,
       # HTTP client
       {Finch, name: Koda.Finch},
+      {Finch, name: Swoosh.Finch},
       # Background jobs
       {Oban, Application.fetch_env!(:koda, Oban)},
       # DNS clustering (multi-node Fly deployments)
