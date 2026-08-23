@@ -20,6 +20,7 @@ defmodule KodaWeb.Router do
     post "/auth/password/reset",   AuthController, :request_password_reset
     post "/auth/password/confirm", AuthController, :confirm_password_reset
     post "/auth/verify_email",     AuthController, :verify_email
+    post "/auth/verify_email/resend", AuthController, :resend_verification
 
     # Server discovery (public -- no auth needed)
     get  "/discover",              DiscoverController, :index
@@ -37,7 +38,6 @@ defmodule KodaWeb.Router do
     delete "/auth/logout",                  AuthController, :logout
     get    "/auth/me",                      AuthController, :me
     post   "/auth/password/force_change",   AuthController, :force_change_password
-    post   "/auth/verify_email/resend",     AuthController, :resend_verification
     post   "/auth/totp/setup",              AuthController, :totp_setup
 
     # Key bundles (E2EE / KCP)
