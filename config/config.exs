@@ -12,7 +12,7 @@ config :koda, KodaWeb.Endpoint,
   pubsub_server: Koda.PubSub,
   live_view:     [signing_salt: "koda_lv_salt"]
 
-config :koda, Koda.Mailer, adapter: Swoosh.Adapters.Local
+config :koda, Koda.Mailer, adapter: Swoosh.Adapters.Test
 
 
 config :koda, Koda.Auth.Guardian,
