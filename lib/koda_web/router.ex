@@ -54,6 +54,17 @@ defmodule KodaWeb.Router do
     post "/import/discord/preview", ImportController, :preview
     post "/servers/:server_id/import/discord", ImportController, :apply
 
+    # Friends
+    get    "/friends",                          FriendsController, :list
+    get    "/friends/pending",                  FriendsController, :pending
+    get    "/friends/status/:user_id",          FriendsController, :status
+    post   "/friends/:user_id/request",         FriendsController, :send_request
+    post   "/friends/:user_id/accept",          FriendsController, :accept_request
+    delete "/friends/:user_id/decline",         FriendsController, :decline_request
+    delete "/friends/:user_id",                 FriendsController, :unfriend
+    post   "/friends/:user_id/block",           FriendsController, :block
+    delete "/friends/:user_id/block",           FriendsController, :unblock
+    patch  "/friends/privacy",                  FriendsController, :update_privacy
     # Invites
     post   "/servers/:server_id/invites",        InviteController, :create
     get    "/servers/:server_id/invites",        InviteController, :list
@@ -138,6 +149,17 @@ defmodule KodaWeb.Router do
     post   "/channels/:channel_id/stage/grant/:user_id",     StageController, :grant_speaker
     delete "/channels/:channel_id/stage/grant/:user_id",     StageController, :revoke_speaker
 
+    # Friends
+    get    "/friends",                          FriendsController, :list
+    get    "/friends/pending",                  FriendsController, :pending
+    get    "/friends/status/:user_id",          FriendsController, :status
+    post   "/friends/:user_id/request",         FriendsController, :send_request
+    post   "/friends/:user_id/accept",          FriendsController, :accept_request
+    delete "/friends/:user_id/decline",         FriendsController, :decline_request
+    delete "/friends/:user_id",                 FriendsController, :unfriend
+    post   "/friends/:user_id/block",           FriendsController, :block
+    delete "/friends/:user_id/block",           FriendsController, :unblock
+    patch  "/friends/privacy",                  FriendsController, :update_privacy
     # Invites
     get    "/servers/:server_id/invites",   InviteController, :index
     post   "/servers/:server_id/invites",   InviteController, :create
