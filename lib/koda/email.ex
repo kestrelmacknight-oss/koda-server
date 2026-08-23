@@ -42,21 +42,21 @@ defmodule Koda.Email do
     body{font-family:-apple-system,sans-serif;background:#f4f5f7;margin:0;padding:0}
     .w{max-width:520px;margin:32px auto;padding:0 16px}
     .card{background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)}
-    .hdr{background:linear-gradient(135deg,#7B68EE,#5BEAD4);padding:28px 32px;text-align:center}
+    .hdr{background:linear-gradient(135deg,#2DD4A0,#5BEAD4);padding:28px 32px;text-align:center}
     .hdr-mark{display:inline-block;width:44px;height:44px;background:rgba(255,255,255,.2);border-radius:11px;font-size:22px;font-weight:800;color:#fff;line-height:44px}
     .hdr-name{color:#fff;font-size:18px;font-weight:700;margin-top:8px}
     .bdy{padding:28px 32px}
     h1{font-size:20px;color:#0d0e1a;margin:0 0 12px}
     p{font-size:14px;color:#4a4f6a;margin:0 0 14px;line-height:1.6}
     .code-box{background:#f0eefb;border:2px solid #c8c1f5;border-radius:10px;text-align:center;padding:18px;margin:20px 0}
-    .code{font-family:monospace;font-size:32px;font-weight:800;color:#7B68EE;letter-spacing:10px}
+    .code{font-family:monospace;font-size:32px;font-weight:800;color:#2DD4A0;letter-spacing:10px}
     .code-lbl{font-size:11px;color:#8890b0;margin-top:6px;text-transform:uppercase;letter-spacing:.08em}
     .ftr{background:#f8f9fc;border-top:1px solid #e8eaf2;padding:16px 32px;text-align:center}
-    .ftr p{font-size:11px;color:#9ba5c8;margin:0}
-    .ftr a{color:#7B68EE;text-decoration:none;font-size:11px}
+    .ftr p{font-size:11px;color:#888888;margin:0}
+    .ftr a{color:#2DD4A0;text-decoration:none;font-size:11px}
     </style></head><body>
     <div class="w"><div class="card">
-    <div class="hdr"><div class="hdr-mark">K</div><div class="hdr-name">Koda</div></div>
+    <div class="hdr"><img src="https://koda.fyi/assets/icons/koda-logo.png" alt="Koda" style="height:40px;object-fit:contain;" /></div>
     <div class="bdy">#{body}</div>
     <div class="ftr">
     <p><a href="#{cfg(:terms_url)}">Terms</a> &nbsp;&middot;&nbsp; <a href="#{cfg(:privacy_url)}">Privacy</a> &nbsp;&middot;&nbsp; <a href="mailto:#{cfg(:support)}">Support</a></p>
@@ -74,7 +74,7 @@ defmodule Koda.Email do
       <div class="code">#{code}</div>
       <div class="code-lbl">Expires in 60 minutes</div>
     </div>
-    <p style="font-size:12px;color:#9ba5c8">If you didn't create a Koda account, you can safely ignore this email.</p>
+    <p style="font-size:12px;color:#888888">If you didn't create a Koda account, you can safely ignore this email.</p>
     """)
   end
 
@@ -86,7 +86,7 @@ defmodule Koda.Email do
       <div class="code">#{code}</div>
       <div class="code-lbl">Expires in 15 minutes</div>
     </div>
-    <p style="font-size:12px;color:#9ba5c8">If you didn't request this, no changes were made to your account.</p>
+    <p style="font-size:12px;color:#888888">If you didn't request this, no changes were made to your account.</p>
     """)
   end
 
@@ -95,7 +95,7 @@ defmodule Koda.Email do
     <h1>Welcome, #{username}!</h1>
     <p>Your account is verified and ready. Koda encrypts your messages on your device before they leave &mdash; we can't read them, and neither can anyone else.</p>
     <p>Create a server, invite your squad, and start talking privately.</p>
-    <p style="font-size:12px;color:#9ba5c8">Questions? <a href="mailto:#{cfg(:support)}">#{cfg(:support)}</a></p>
+    <p style="font-size:12px;color:#888888">Questions? <a href="mailto:#{cfg(:support)}">#{cfg(:support)}</a></p>
     """)
   end
 end
