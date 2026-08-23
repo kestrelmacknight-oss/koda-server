@@ -19,7 +19,7 @@ defmodule Koda.Gallery do
       belongs_to :channel, Koda.Servers.Channel
       belongs_to :creator, Koda.Auth.User
       has_many :posts, Koda.Gallery.Post, foreign_key: :collection_id
-      timestamps(type: :utc_datetime)
+      timestamps(type: :utc_datetime_usec)
     end
 
     def changeset(c, attrs) do
@@ -44,7 +44,7 @@ defmodule Koda.Gallery do
       belongs_to :channel,    Koda.Servers.Channel
       belongs_to :collection, Koda.Gallery.Collection
       belongs_to :creator,    Koda.Auth.User
-      timestamps(type: :utc_datetime)
+      timestamps(type: :utc_datetime_usec)
     end
 
     def changeset(p, attrs) do

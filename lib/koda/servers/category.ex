@@ -10,7 +10,7 @@ defmodule Koda.Servers.Category do
     field :position, :integer, default: 0
     belongs_to :server, Koda.Servers.Server
     has_many   :channels, Koda.Servers.Channel
-    timestamps(type: :utc_datetime)
+    timestamps(type: :utc_datetime_usec)
   end
 
   def changeset(category, attrs) do

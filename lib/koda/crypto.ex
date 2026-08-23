@@ -30,7 +30,7 @@ defmodule Koda.Crypto do
       field :opks,          {:array, :string}, default: []
       field :spk_rotated_at, :utc_datetime
       belongs_to :user, Koda.Auth.User
-      timestamps(type: :utc_datetime)
+      timestamps(type: :utc_datetime_usec)
     end
 
     def changeset(bundle, attrs) do

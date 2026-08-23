@@ -20,7 +20,7 @@ defmodule Koda.Auth.User do
     field :email_verified,       :boolean, default: false
     field :settings,             :map, default: %{}
     field :flags,               :map, default: %{}
-    timestamps(type: :utc_datetime)
+    timestamps(type: :utc_datetime_usec)
   end
   def registration_changeset(user, attrs) do
     user

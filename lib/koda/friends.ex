@@ -16,7 +16,7 @@ defmodule Koda.Friends do
       field :message, :string
       belongs_to :user,   Auth.User
       belongs_to :friend, Auth.User
-      timestamps(type: :utc_datetime)
+      timestamps(type: :utc_datetime_usec)
     end
 
     def changeset(f, attrs) do

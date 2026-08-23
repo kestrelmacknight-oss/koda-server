@@ -23,7 +23,7 @@ defmodule Koda.Invites do
       field :expires_at, :utc_datetime
       belongs_to :server,  Koda.Servers.Server
       belongs_to :creator, Koda.Auth.User
-      timestamps(type: :utc_datetime)
+      timestamps(type: :utc_datetime_usec)
     end
 
     def changeset(i, attrs) do
@@ -48,7 +48,7 @@ defmodule Koda.Invites do
       field :uses,       :integer, default: 0
       field :expires_at, :utc_datetime
       belongs_to :creator, Koda.Auth.User, foreign_key: :created_by
-      timestamps(type: :utc_datetime)
+      timestamps(type: :utc_datetime_usec)
     end
 
     def changeset(c, attrs) do
