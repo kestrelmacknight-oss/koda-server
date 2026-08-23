@@ -6,6 +6,9 @@ defmodule KodaWeb.AuthController do
     case Auth.create_user(params) do
       {:ok, user} ->
         Task.start(fn ->
+          adapter = Application.get_env(:koda, Koda.Mailer)[:adapter]
+          require Logger
+          Logger.info("[Email] Using adapter: \#{inspect(adapter)}")
           case Auth.send_verification_email(user) do
             {:ok, _} -> require Logger; Logger.info("[Email] Verification sent to \#{user.email}")
             :ok -> require Logger; Logger.info("[Email] Verification sent to \#{user.email}")
