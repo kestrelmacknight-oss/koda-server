@@ -14,7 +14,6 @@ config :koda, KodaWeb.Endpoint,
 
 config :koda, Koda.Mailer, adapter: Swoosh.Adapters.Local
 
-config :swoosh, :api_client, false
 
 config :koda, Koda.Auth.Guardian,
   issuer:     "koda",
