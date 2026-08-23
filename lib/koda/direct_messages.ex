@@ -12,7 +12,7 @@ defmodule Koda.DirectMessages do
     schema "dm_conversations" do
       belongs_to :initiator, Koda.Auth.User, foreign_key: :initiator_id
       belongs_to :recipient, Koda.Auth.User, foreign_key: :recipient_id
-      timestamps(type: :utc_datetime)
+      timestamps(type: :utc_datetime_usec)
     end
 
     def changeset(c, attrs) do

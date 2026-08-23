@@ -24,7 +24,7 @@ defmodule Koda.Servers.Role do
     many_to_many :members, Koda.Servers.Member,
       join_through: "member_roles",
       join_keys: [role_id: :id, member_id: :id]
-    timestamps(type: :utc_datetime)
+    timestamps(type: :utc_datetime_usec)
   end
 
   def changeset(role, attrs) do

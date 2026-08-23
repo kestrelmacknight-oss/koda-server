@@ -12,7 +12,7 @@ defmodule Koda.Servers.Channel do
     field :is_read_only,       :boolean, default: false
     belongs_to :server,   Koda.Servers.Server
     belongs_to :category, Koda.Servers.Category
-    timestamps(type: :utc_datetime)
+    timestamps(type: :utc_datetime_usec)
   end
   def changeset(channel, attrs) do
     channel

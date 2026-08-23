@@ -16,7 +16,7 @@ defmodule Koda.Servers.Server do
     belongs_to :owner, Koda.Auth.User
     has_many :channels, Koda.Servers.Channel
     has_many :members,  Koda.Servers.Member
-    timestamps(type: :utc_datetime)
+    timestamps(type: :utc_datetime_usec)
   end
 
   def changeset(server, attrs) do
