@@ -72,9 +72,8 @@ defmodule KodaWeb.AuthController do
     end
   end
 
-  def verify_email(conn, %{"code" => code}) do
-    user = Guardian.Plug.current_resource(conn)
-    case Auth.verify_email(user.id, code) do
+  def verify_email(conn, %{"user_id" => user_id, "code" => code}) do
+    case Auth.verify_email(user_id, code) do
       {:ok, _} ->
         Koda.Email.send_welcome(user)
         json(conn, %{message: "Email verified"})
