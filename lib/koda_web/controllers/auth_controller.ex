@@ -7,8 +7,10 @@ defmodule KodaWeb.AuthController do
       {:ok, user} ->
         Task.start(fn ->
           case Auth.send_verification_email(user) do
-            {:ok, _} -> require Logger; Logger.info("[Email] Verification sent to #{user.email}")
-            {:error, e} -> require Logger; Logger.error("[Email] Failed: #{inspect(e)}")
+            {:ok, _} -> require Logger; Logger.info("[Email] Verification sent to \#{user.email}")
+            :ok -> require Logger; Logger.info("[Email] Verification sent to \#{user.email}")
+            {:error, e} -> require Logger; Logger.error("[Email] Failed: \#{inspect(e)}")
+            e -> require Logger; Logger.error("[Email] Unexpected: \#{inspect(e)}")
           end
         end)
         json(conn, %{
