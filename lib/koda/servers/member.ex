@@ -9,7 +9,7 @@ defmodule Koda.Servers.Member do
     field :nickname,      :string
     field :is_subscriber, :boolean, default: false
     field :is_banned,     :boolean, default: false
-    field :joined_at,     :utc_datetime
+    field :joined_at,     :utc_datetime_usec
     belongs_to :server, Koda.Servers.Server
     belongs_to :user,   Koda.Auth.User
     many_to_many :roles, Koda.Servers.Role,

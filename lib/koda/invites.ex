@@ -20,7 +20,7 @@ defmodule Koda.Invites do
       field :code,       :string
       field :uses,       :integer, default: 0
       field :max_uses,   :integer
-      field :expires_at, :utc_datetime
+      field :expires_at, :utc_datetime_usec
       belongs_to :server,  Koda.Servers.Server
       belongs_to :creator, Koda.Auth.User
       timestamps(type: :utc_datetime_usec)
@@ -46,7 +46,7 @@ defmodule Koda.Invites do
       field :note,       :string
       field :max_uses,   :integer
       field :uses,       :integer, default: 0
-      field :expires_at, :utc_datetime
+      field :expires_at, :utc_datetime_usec
       belongs_to :creator, Koda.Auth.User, foreign_key: :created_by
       timestamps(type: :utc_datetime_usec)
     end
@@ -66,7 +66,7 @@ defmodule Koda.Invites do
     @foreign_key_type :binary_id
 
     schema "backer_code_redemptions" do
-      field :redeemed_at, :utc_datetime
+      field :redeemed_at, :utc_datetime_usec
       belongs_to :code, BackerCode
       belongs_to :user, Koda.Auth.User
     end

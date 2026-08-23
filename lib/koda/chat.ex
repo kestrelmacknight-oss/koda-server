@@ -19,7 +19,7 @@ defmodule Koda.Chat do
       field :sender_id,   :binary_id
       field :content,     :string
       field :encrypted,   :boolean, default: false
-      field :inserted_at, :utc_datetime
+      field :inserted_at, :utc_datetime_usec
     end
 
     def changeset(m, attrs) do
@@ -40,7 +40,7 @@ defmodule Koda.Chat do
       field :sender_id,       :binary_id
       field :content,         :string
       field :encrypted,       :boolean, default: false
-      field :inserted_at,     :utc_datetime
+      field :inserted_at,     :utc_datetime_usec
     end
 
     def changeset(m, attrs) do

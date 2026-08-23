@@ -28,7 +28,7 @@ defmodule Koda.Crypto do
       field :spk_pub,       :string
       field :spk_sig,       :string
       field :opks,          {:array, :string}, default: []
-      field :spk_rotated_at, :utc_datetime
+      field :spk_rotated_at, :utc_datetime_usec
       belongs_to :user, Koda.Auth.User
       timestamps(type: :utc_datetime_usec)
     end

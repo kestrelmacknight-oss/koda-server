@@ -3,7 +3,7 @@ import Config
 config :koda,
   ecto_repos: [Koda.Repo],
   env:        config_env(),
-  generators: [timestamp_type: :utc_datetime]
+  generators: [timestamp_type: :utc_datetime_usec]
 
 config :koda, KodaWeb.Endpoint,
   url:           [host: "localhost"],
