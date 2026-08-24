@@ -401,8 +401,6 @@ defmodule Koda.Servers do
       preload: [:user]
     )
   end
-end
-
   def accept_rules(server_id, user_id) do
     case get_member(server_id, user_id) do
       nil -> {:error, :not_member}
@@ -421,7 +419,6 @@ end
   end
 
   def assign_role(server_id, user_id, role_id) do
-    # Only allow self-assignment of roles marked self_assignable
     role = Repo.get_by(Role, id: role_id, server_id: server_id)
     cond do
       is_nil(role) -> {:error, :not_found}
@@ -438,3 +435,4 @@ end
       true -> remove_member_role(server_id, user_id, role_id)
     end
   end
+end
