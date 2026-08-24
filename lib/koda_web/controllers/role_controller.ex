@@ -87,7 +87,7 @@ defmodule KodaWeb.RoleController do
 
   defp role_json(r) do
     %{id: r.id, name: r.name, color: r.color, position: r.position,
-      is_default: r.is_default, permissions: r.permissions}
+      is_default: r.is_default, self_assignable: r.self_assignable, permissions: r.permissions}
   end
 
   defp format_errors(cs) do
