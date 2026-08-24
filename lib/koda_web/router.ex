@@ -54,6 +54,13 @@ defmodule KodaWeb.Router do
     post "/import/discord/preview", ImportController, :preview
     post "/servers/:server_id/import/discord", ImportController, :apply
 
+    # Rules & self-assignable roles
+    get    "/servers/:server_id/rules",                RulesController, :get_rules
+    post   "/servers/:server_id/rules/accept",         RulesController, :accept_rules
+    put    "/servers/:server_id/rules",                RulesController, :update_rules
+    get    "/servers/:server_id/roles/assignable",     RulesController, :self_assignable_roles
+    post   "/servers/:server_id/roles/:role_id/assign",   RulesController, :assign_role
+    delete "/servers/:server_id/roles/:role_id/assign",   RulesController, :unassign_role
     # Friends
     get    "/friends",                          FriendsController, :list
     get    "/friends/pending",                  FriendsController, :pending
@@ -149,6 +156,13 @@ defmodule KodaWeb.Router do
     post   "/channels/:channel_id/stage/grant/:user_id",     StageController, :grant_speaker
     delete "/channels/:channel_id/stage/grant/:user_id",     StageController, :revoke_speaker
 
+    # Rules & self-assignable roles
+    get    "/servers/:server_id/rules",                RulesController, :get_rules
+    post   "/servers/:server_id/rules/accept",         RulesController, :accept_rules
+    put    "/servers/:server_id/rules",                RulesController, :update_rules
+    get    "/servers/:server_id/roles/assignable",     RulesController, :self_assignable_roles
+    post   "/servers/:server_id/roles/:role_id/assign",   RulesController, :assign_role
+    delete "/servers/:server_id/roles/:role_id/assign",   RulesController, :unassign_role
     # Friends
     get    "/friends",                          FriendsController, :list
     get    "/friends/pending",                  FriendsController, :pending
@@ -177,6 +191,13 @@ defmodule KodaWeb.Router do
     post   "/notifications/:id/read",       NotificationController, :mark_read
     post   "/notifications/read_all",       NotificationController, :mark_all_read
 
+    # Rules & self-assignable roles
+    get    "/servers/:server_id/rules",                RulesController, :get_rules
+    post   "/servers/:server_id/rules/accept",         RulesController, :accept_rules
+    put    "/servers/:server_id/rules",                RulesController, :update_rules
+    get    "/servers/:server_id/roles/assignable",     RulesController, :self_assignable_roles
+    post   "/servers/:server_id/roles/:role_id/assign",   RulesController, :assign_role
+    delete "/servers/:server_id/roles/:role_id/assign",   RulesController, :unassign_role
     # Friends
     get    "/friends",                      FriendController, :index
     post   "/friends/request",              FriendController, :send_request

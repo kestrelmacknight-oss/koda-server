@@ -18,7 +18,8 @@ defmodule Koda.Servers.Role do
     field :name,        :string
     field :color,       :string,  default: "#9BA5C8"
     field :position,    :integer, default: 0
-    field :is_default,  :boolean, default: false
+    field :is_default,     :boolean, default: false
+    field :self_assignable, :boolean, default: false
     field :permissions, :map,     default: %{}
     belongs_to :server, Koda.Servers.Server
     many_to_many :members, Koda.Servers.Member,
@@ -29,7 +30,7 @@ defmodule Koda.Servers.Role do
 
   def changeset(role, attrs) do
     role
-    |> cast(attrs, [:name, :color, :position, :is_default, :permissions, :server_id])
+    |> cast(attrs, [:name, :color, :position, :is_default, :self_assignable, :permissions, :server_id])
     |> validate_required([:name, :server_id])
     |> validate_length(:name, min: 1, max: 50)
     |> validate_format(:color, ~r/^#[0-9A-Fa-f]{6}$/,

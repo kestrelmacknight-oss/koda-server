@@ -402,3 +402,39 @@ defmodule Koda.Servers do
     )
   end
 end
+
+  def accept_rules(server_id, user_id) do
+    case get_member(server_id, user_id) do
+      nil -> {:error, :not_member}
+      member ->
+        member
+        |> Member.changeset(%{rules_accepted: true})
+        |> Repo.update()
+    end
+  end
+
+  def rules_accepted?(server_id, user_id) do
+    case get_member(server_id, user_id) do
+      nil -> false
+      member -> member.rules_accepted
+    end
+  end
+
+  def assign_role(server_id, user_id, role_id) do
+    # Only allow self-assignment of roles marked self_assignable
+    role = Repo.get_by(Role, id: role_id, server_id: server_id)
+    cond do
+      is_nil(role) -> {:error, :not_found}
+      not role.self_assignable -> {:error, :not_self_assignable}
+      true -> add_member_role(server_id, user_id, role_id)
+    end
+  end
+
+  def unassign_role(server_id, user_id, role_id) do
+    role = Repo.get_by(Role, id: role_id, server_id: server_id)
+    cond do
+      is_nil(role) -> {:error, :not_found}
+      not role.self_assignable -> {:error, :not_self_assignable}
+      true -> remove_member_role(server_id, user_id, role_id)
+    end
+  end
