@@ -4,6 +4,8 @@ defmodule KodaWeb.RoleController do
 
   def index(conn, %{"server_id" => server_id}) do
     roles = Servers.list_roles(server_id)
+    require Logger
+    Logger.info("[Roles] server_id=\#{server_id} count=\#{length(roles)}")
     json(conn, %{roles: Enum.map(roles, &role_json/1)})
   end
 
