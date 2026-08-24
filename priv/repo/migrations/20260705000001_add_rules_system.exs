@@ -3,7 +3,7 @@ defmodule Koda.Repo.Migrations.AddRulesSystem do
 
   def change do
     # Track whether member has accepted server rules
-    alter table(:members) do
+    alter table(:server_members) do
       add_if_not_exists :rules_accepted, :boolean, default: false
     end
 
