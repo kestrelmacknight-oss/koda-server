@@ -169,10 +169,16 @@ defmodule KodaWeb.ImportController do
 
     mapped_roles = roles
       |> Enum.map(fn r ->
+        color_int = Map.get(r, "color", 0)
+        color_hex = if color_int == 0 do
+          "#9BA5C8"
+        else
+          "#" <> String.pad_leading(Integer.to_string(color_int, 16), 6, "0")
+        end
         %{
           "discord_id"  => r["id"],
           "name"        => r["name"],
-          "color"       => Map.get(r, "color", 0),
+          "color"       => color_hex,
           "permissions" => map_permissions(Map.get(r, "permissions", "0"))
         }
       end)
