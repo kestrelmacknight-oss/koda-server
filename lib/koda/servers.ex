@@ -420,19 +420,23 @@ defmodule Koda.Servers do
 
   def assign_role(server_id, user_id, role_id) do
     role = Repo.get_by(Role, id: role_id, server_id: server_id)
+    member = get_member(server_id, user_id)
     cond do
       is_nil(role) -> {:error, :not_found}
+      is_nil(member) -> {:error, :not_member}
       not role.self_assignable -> {:error, :not_self_assignable}
-      true -> add_member_role(server_id, user_id, role_id)
+      true -> assign_role(member.id, role_id)
     end
   end
 
   def unassign_role(server_id, user_id, role_id) do
     role = Repo.get_by(Role, id: role_id, server_id: server_id)
+    member = get_member(server_id, user_id)
     cond do
       is_nil(role) -> {:error, :not_found}
+      is_nil(member) -> {:error, :not_member}
       not role.self_assignable -> {:error, :not_self_assignable}
-      true -> remove_member_role(server_id, user_id, role_id)
+      true -> remove_role(member.id, role_id)
     end
   end
 end
