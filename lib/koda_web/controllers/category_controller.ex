@@ -52,7 +52,9 @@ defmodule KodaWeb.CategoryController do
   end
 
   defp category_json(c) do
-    %{id: c.id, name: c.name, position: c.position, server_id: c.server_id}
+    allowed_role_ids = Koda.Servers.get_category_allowed_roles(c.id)
+    %{id: c.id, name: c.name, position: c.position, server_id: c.server_id,
+      allowed_role_ids: allowed_role_ids}
   end
 
   defp format_errors(cs) do

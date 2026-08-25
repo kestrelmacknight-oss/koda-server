@@ -504,4 +504,49 @@ defmodule Koda.Servers do
       end
     end
   end
+  # ── Category role permissions ─────────────────────────────────────────────
+
+  defmodule CategoryAllowedRole do
+    use Ecto.Schema
+    import Ecto.Changeset
+    @primary_key {:id, :binary_id, autogenerate: true}
+    @foreign_key_type :binary_id
+
+    schema "category_allowed_roles" do
+      belongs_to :category, Koda.Servers.Category
+      belongs_to :role,     Koda.Servers.Role
+      timestamps(type: :utc_datetime_usec, updated_at: false)
+    end
+
+    def changeset(m, attrs) do
+      m
+      |> cast(attrs, [:category_id, :role_id])
+      |> validate_required([:category_id, :role_id])
+      |> unique_constraint([:category_id, :role_id])
+    end
+  end
+
+  def get_category_allowed_roles(category_id) do
+    import Ecto.Query
+    Repo.all(
+      from car in CategoryAllowedRole,
+      where: car.category_id == ^category_id,
+      select: car.role_id
+    )
+  end
+
+  def set_category_allowed_roles(category_id, role_ids) do
+    import Ecto.Query
+    Repo.transaction(fn ->
+      Repo.delete_all(
+        from car in CategoryAllowedRole,
+        where: car.category_id == ^category_id
+      )
+      Enum.each(role_ids, fn role_id ->
+        %CategoryAllowedRole{}
+        |> CategoryAllowedRole.changeset(%{category_id: category_id, role_id: role_id})
+        |> Repo.insert(on_conflict: :nothing)
+      end)
+    end)
+  end
 end

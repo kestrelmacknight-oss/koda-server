@@ -61,6 +61,8 @@ defmodule KodaWeb.Router do
     get    "/servers/:server_id/roles/assignable",     RulesController, :self_assignable_roles
     post   "/servers/:server_id/roles/:role_id/assign",   RulesController, :assign_role
     delete "/servers/:server_id/roles/:role_id/assign",   RulesController, :unassign_role
+    get    "/categories/:category_id/roles",     CategoryPermissionsController, :index
+    put    "/categories/:category_id/roles",     CategoryPermissionsController, :update
     # Channel role permissions
     get    "/channels/:channel_id/roles",        ChannelPermissionsController, :index
     put    "/channels/:channel_id/roles",        ChannelPermissionsController, :update
@@ -166,6 +168,8 @@ defmodule KodaWeb.Router do
     get    "/servers/:server_id/roles/assignable",     RulesController, :self_assignable_roles
     post   "/servers/:server_id/roles/:role_id/assign",   RulesController, :assign_role
     delete "/servers/:server_id/roles/:role_id/assign",   RulesController, :unassign_role
+    get    "/categories/:category_id/roles",     CategoryPermissionsController, :index
+    put    "/categories/:category_id/roles",     CategoryPermissionsController, :update
     # Channel role permissions
     get    "/channels/:channel_id/roles",        ChannelPermissionsController, :index
     put    "/channels/:channel_id/roles",        ChannelPermissionsController, :update
@@ -204,6 +208,8 @@ defmodule KodaWeb.Router do
     get    "/servers/:server_id/roles/assignable",     RulesController, :self_assignable_roles
     post   "/servers/:server_id/roles/:role_id/assign",   RulesController, :assign_role
     delete "/servers/:server_id/roles/:role_id/assign",   RulesController, :unassign_role
+    get    "/categories/:category_id/roles",     CategoryPermissionsController, :index
+    put    "/categories/:category_id/roles",     CategoryPermissionsController, :update
     # Channel role permissions
     get    "/channels/:channel_id/roles",        ChannelPermissionsController, :index
     put    "/channels/:channel_id/roles",        ChannelPermissionsController, :update
