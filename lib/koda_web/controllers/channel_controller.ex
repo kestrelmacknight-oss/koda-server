@@ -92,7 +92,8 @@ defmodule KodaWeb.ChannelController do
   defp channel_json(c) do
     %{id: c.id, name: c.name, type: c.type, description: c.description,
       position: c.position, is_subscriber_only: c.is_subscriber_only,
-      server_id: c.server_id, category_id: c.category_id}
+      server_id: c.server_id, category_id: c.category_id,
+      rules_content: Map.get(c, :rules_content)}
   end
 
   defp format_errors(cs) do
