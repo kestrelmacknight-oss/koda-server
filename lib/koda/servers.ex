@@ -492,7 +492,9 @@ defmodule Koda.Servers do
       true
     else
       member = get_member(server_id, user_id)
-      if is_nil(member), do: false, else: begin
+      if is_nil(member) do
+        false
+      else
         member_role_ids =
           from(mr in Koda.Servers.MemberRole,
             where: mr.member_id == ^member.id,
