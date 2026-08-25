@@ -61,6 +61,9 @@ defmodule KodaWeb.Router do
     get    "/servers/:server_id/roles/assignable",     RulesController, :self_assignable_roles
     post   "/servers/:server_id/roles/:role_id/assign",   RulesController, :assign_role
     delete "/servers/:server_id/roles/:role_id/assign",   RulesController, :unassign_role
+    # Channel role permissions
+    get    "/channels/:channel_id/roles",        ChannelPermissionsController, :index
+    put    "/channels/:channel_id/roles",        ChannelPermissionsController, :update
     # Friends
     get    "/friends",                          FriendsController, :list
     get    "/friends/pending",                  FriendsController, :pending
@@ -163,6 +166,9 @@ defmodule KodaWeb.Router do
     get    "/servers/:server_id/roles/assignable",     RulesController, :self_assignable_roles
     post   "/servers/:server_id/roles/:role_id/assign",   RulesController, :assign_role
     delete "/servers/:server_id/roles/:role_id/assign",   RulesController, :unassign_role
+    # Channel role permissions
+    get    "/channels/:channel_id/roles",        ChannelPermissionsController, :index
+    put    "/channels/:channel_id/roles",        ChannelPermissionsController, :update
     # Friends
     get    "/friends",                          FriendsController, :list
     get    "/friends/pending",                  FriendsController, :pending
@@ -198,6 +204,9 @@ defmodule KodaWeb.Router do
     get    "/servers/:server_id/roles/assignable",     RulesController, :self_assignable_roles
     post   "/servers/:server_id/roles/:role_id/assign",   RulesController, :assign_role
     delete "/servers/:server_id/roles/:role_id/assign",   RulesController, :unassign_role
+    # Channel role permissions
+    get    "/channels/:channel_id/roles",        ChannelPermissionsController, :index
+    put    "/channels/:channel_id/roles",        ChannelPermissionsController, :update
     # Friends
     get    "/friends",                      FriendController, :index
     post   "/friends/request",              FriendController, :send_request

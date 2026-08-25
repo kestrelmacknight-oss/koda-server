@@ -439,4 +439,67 @@ defmodule Koda.Servers do
       true -> remove_role(member.id, role_id)
     end
   end
+  # ── Channel role permissions ──────────────────────────────────────────────
+
+  defmodule ChannelAllowedRole do
+    use Ecto.Schema
+    import Ecto.Changeset
+    @primary_key {:id, :binary_id, autogenerate: true}
+    @foreign_key_type :binary_id
+
+    schema "channel_allowed_roles" do
+      belongs_to :channel, Koda.Servers.Channel
+      belongs_to :role,    Koda.Servers.Role
+      timestamps(type: :utc_datetime_usec, updated_at: false)
+    end
+
+    def changeset(m, attrs) do
+      m
+      |> cast(attrs, [:channel_id, :role_id])
+      |> validate_required([:channel_id, :role_id])
+      |> unique_constraint([:channel_id, :role_id])
+    end
+  end
+
+  def get_channel_allowed_roles(channel_id) do
+    import Ecto.Query
+    Repo.all(
+      from car in ChannelAllowedRole,
+      where: car.channel_id == ^channel_id,
+      select: car.role_id
+    )
+  end
+
+  def set_channel_allowed_roles(channel_id, role_ids) do
+    import Ecto.Query
+    Repo.transaction(fn ->
+      Repo.delete_all(
+        from car in ChannelAllowedRole,
+        where: car.channel_id == ^channel_id
+      )
+      Enum.each(role_ids, fn role_id ->
+        %ChannelAllowedRole{}
+        |> ChannelAllowedRole.changeset(%{channel_id: channel_id, role_id: role_id})
+        |> Repo.insert(on_conflict: :nothing)
+      end)
+    end)
+  end
+
+  def member_can_view_channel?(channel_id, user_id, server_id) do
+    import Ecto.Query
+    allowed_roles = get_channel_allowed_roles(channel_id)
+    if Enum.empty?(allowed_roles) do
+      true
+    else
+      member = get_member(server_id, user_id)
+      if is_nil(member), do: false, else: begin
+        member_role_ids =
+          from(mr in Koda.Servers.MemberRole,
+            where: mr.member_id == ^member.id,
+            select: mr.role_id
+          ) |> Repo.all()
+        Enum.any?(allowed_roles, &(&1 in member_role_ids))
+      end
+    end
+  end
 end
