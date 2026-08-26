@@ -16,7 +16,7 @@ defmodule Koda.Servers.Channel do
   end
   def changeset(channel, attrs) do
     channel
-    |> cast(attrs, [:name, :type, :description, :position,
+    |> cast(attrs, [:name, :type, :description, :position, :rules_content,
                     :is_subscriber_only, :is_read_only, :server_id, :category_id])
     |> validate_required([:name, :server_id])
     |> validate_length(:name, min: 1, max: 100)
