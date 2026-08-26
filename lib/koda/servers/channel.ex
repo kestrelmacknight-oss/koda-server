@@ -7,6 +7,7 @@ defmodule Koda.Servers.Channel do
     field :name,               :string
     field :type,               :string, default: "text"
     field :description,        :string
+    field :rules_content,       :string
     field :position,           :integer, default: 0
     field :is_subscriber_only, :boolean, default: false
     field :is_read_only,       :boolean, default: false
