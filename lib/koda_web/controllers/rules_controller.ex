@@ -12,7 +12,7 @@ defmodule KodaWeb.RulesController do
     )
     if channel do
       json(conn, %{
-        rules:    channel.rules_content,
+        rules:    Map.get(channel, :rules_content),
         accepted: Servers.rules_accepted?(server_id, Guardian.Plug.current_resource(conn).id)
       })
     else
