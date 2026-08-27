@@ -83,6 +83,8 @@ defmodule Koda.Chat do
           inserted_at: DateTime.to_iso8601(now)
         }
         Phoenix.PubSub.broadcast(Koda.PubSub, "channel:#{channel_id}", {:new_message, msg})
+        # Process mentions asynchronously
+        Task.start(fn -> process_mentions(channel_id, sender_id, content, msg) end)
         {:ok, msg}
       {:error, reason} ->
         {:error, reason}
@@ -225,5 +227,95 @@ defmodule Koda.Chat do
         "avatar_url" => info.avatar_url
       })
     end)
+  end
+  # ── Mention processing ────────────────────────────────────────────────────
+
+  defp process_mentions(channel_id, sender_id, content, msg) do
+    channel = Koda.Repo.get(Koda.Servers.Channel, channel_id)
+    if is_nil(channel), do: :ok, else: do_process_mentions(channel, sender_id, content, msg)
+  end
+
+  defp do_process_mentions(channel, sender_id, content, msg) do
+    import Ecto.Query
+    server_id   = channel.server_id
+    channel_name = channel.name
+    sender      = Koda.Repo.get(Koda.Auth.User, sender_id)
+    sender_name = if sender, do: sender.username, else: "Someone"
+    title       = "Mentioned in ##{channel_name}"
+    notif_data  = %{channel_id: channel.id, server_id: server_id,
+                    message_id: msg.id, sender: sender_name}
+
+    cond do
+      # @everyone -- notify all server members except sender
+      String.contains?(content, "@everyone") ->
+        members = Koda.Repo.all(
+          from m in Koda.Servers.Member,
+          where: m.server_id == ^server_id and m.user_id != ^sender_id,
+          select: m.user_id
+        )
+        Enum.each(members, fn user_id ->
+          {:ok, notif} = Koda.Notifications.create(user_id, "mention", title,
+            "@everyone in ##{channel_name}", notif_data)
+          push_notification(user_id, notif)
+        end)
+
+      # @roleName or @username mentions
+      true ->
+        # Extract all @mentions from content
+        mentions = Regex.scan(~r/@([A-Za-z0-9_]+)/, content, capture: :all_but_first)
+          |> List.flatten()
+          |> Enum.uniq()
+
+        Enum.each(mentions, fn mention ->
+          # Check if it matches a role
+          role = Koda.Repo.one(
+            from r in Koda.Servers.Role,
+            where: r.server_id == ^server_id and
+                   fragment("lower(?)", r.name) == ^String.downcase(mention)
+          )
+
+          if role do
+            # Notify all members with this role
+            members = Koda.Repo.all(
+              from mr in Koda.Servers.MemberRole,
+              join: m in Koda.Servers.Member,
+                on: m.id == mr.member_id and m.server_id == ^server_id,
+              where: mr.role_id == ^role.id and m.user_id != ^sender_id,
+              select: m.user_id
+            )
+            Enum.each(members, fn user_id ->
+              {:ok, notif} = Koda.Notifications.create(user_id, "role_mention",
+                title, "@#{mention} in ##{channel_name}", notif_data)
+              push_notification(user_id, notif)
+            end)
+          else
+            # Check if it matches a username
+            user = Koda.Repo.one(
+              from u in Koda.Auth.User,
+              where: fragment("lower(?)", u.username) == ^String.downcase(mention)
+            )
+            if user && user.id != sender_id do
+              {:ok, notif} = Koda.Notifications.create(user.id, "mention",
+                title, "@#{mention} in ##{channel_name}", notif_data)
+              push_notification(user.id, notif)
+            end
+          end
+        end)
+    end
+  end
+
+  defp push_notification(user_id, notif) do
+    Phoenix.PubSub.broadcast(
+      Koda.PubSub,
+      "user:#{user_id}",
+      {:notification, %{
+        id:         notif.id,
+        type:       notif.type,
+        title:      notif.title,
+        body:       notif.body,
+        data:       notif.data,
+        inserted_at: DateTime.to_iso8601(notif.inserted_at)
+      }}
+    )
   end
 end
