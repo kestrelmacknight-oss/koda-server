@@ -95,6 +95,7 @@ defmodule KodaWeb.ChannelController do
       position: c.position, is_subscriber_only: c.is_subscriber_only,
       server_id: c.server_id, category_id: c.category_id,
       rules_content: Map.get(c, :rules_content),
+      is_read_only: c.is_read_only,
       allowed_role_ids: allowed_role_ids}
   end
 
