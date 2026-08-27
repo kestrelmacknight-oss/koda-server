@@ -36,4 +36,14 @@ defmodule KodaWeb.UserController do
       {:error, _} -> conn |> put_status(422) |> json(%{error: "Update failed"})
     end
   end
+  def search(conn, %{"username" => username}) do
+    import Ecto.Query
+    users = Koda.Repo.all(
+      from u in Koda.Auth.User,
+      where: ilike(u.username, ^"%#{username}%"),
+      select: %{id: u.id, username: u.username, avatar_url: u.avatar_url},
+      limit: 10
+    )
+    json(conn, %{users: users})
+  end
 end

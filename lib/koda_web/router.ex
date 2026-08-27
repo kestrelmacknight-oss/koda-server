@@ -49,6 +49,7 @@ defmodule KodaWeb.Router do
     post   "/auth/totp/verify",             AuthController, :totp_verify
     get    "/auth/keys",                    AuthController, :get_keys
     put    "/auth/keys",                    AuthController, :upload_keys
+    get    "/users/search",                 UserController, :search
     get    "/users/:id/keys",               AuthController, :get_user_keys
 
     post "/import/discord/preview", ImportController, :preview
