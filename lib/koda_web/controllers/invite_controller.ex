@@ -142,7 +142,7 @@ defmodule KodaWeb.InviteController do
       uses:       invite.uses,
       max_uses:   invite.max_uses,
       expires_at: invite.expires_at,
-      url:        "https://koda.fyi/invite/#{invite.code}"
+      url:        "https://koda.fyi/invite/##{invite.code}"
     }
   end
 
