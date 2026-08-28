@@ -69,6 +69,16 @@ defmodule KodaWeb.ChannelController do
   end
 
   def send_message(conn, %{"channel_id" => channel_id, "content" => content} = params) do
+    channel = Koda.Servers.get_channel(channel_id)
+    user = Guardian.Plug.current_resource(conn)
+    if channel && channel.is_read_only do
+      # Check if user has a role with manage_messages or send_messages permission
+      has_permission = Koda.Servers.member_can?(channel.server_id, user.id, "manage_messages") or
+                       Koda.Servers.owner?(channel.server_id, user.id)
+      unless has_permission do
+        conn |> put_status(403) |> json(%{error: "This channel is view only"}) |> halt()
+      end
+    end
     user    = Guardian.Plug.current_resource(conn)
     channel = Servers.get_channel(channel_id)
     if channel && Servers.get_member(channel.server_id, user.id) do
