@@ -4,7 +4,7 @@ defmodule KodaWeb.RoomChannel do
 
   @impl true
   def join("channel:" <> channel_id, _payload, socket) do
-    user    = Guardian.Phoenix.Socket.current_resource(socket)
+    user    = socket.assigns[:current_user]
     channel = Servers.get_channel(channel_id)
 
     cond do
@@ -21,7 +21,7 @@ defmodule KodaWeb.RoomChannel do
   end
 
   def join("dm:" <> conversation_id, _payload, socket) do
-    user  = Guardian.Phoenix.Socket.current_resource(socket)
+    user  = socket.assigns[:current_user]
     convo = Koda.DirectMessages.get_conversation(conversation_id, user.id)
 
     if convo do
@@ -32,7 +32,7 @@ defmodule KodaWeb.RoomChannel do
   end
 
   def join("user:" <> user_id, _payload, socket) do
-    current = Guardian.Phoenix.Socket.current_resource(socket)
+    current = socket.assigns[:current_user]
     if current.id == user_id do
       {:ok, socket}
     else
@@ -43,7 +43,7 @@ defmodule KodaWeb.RoomChannel do
   @impl true
   def handle_info({:after_join, channel_id}, socket) do
     KodaWeb.Presence.track(socket, socket.assigns[:channel_id], %{
-      user_id:    Guardian.Phoenix.Socket.current_resource(socket).id,
+      user_id:    socket.assigns[:current_user].id,
       joined_at:  DateTime.utc_now() |> DateTime.to_iso8601()
     })
     push(socket, "presence_state", KodaWeb.Presence.list(socket))
@@ -52,7 +52,7 @@ defmodule KodaWeb.RoomChannel do
 
   @impl true
   def handle_in("new_message", %{"content" => content}, socket) do
-    user       = Guardian.Phoenix.Socket.current_resource(socket)
+    user       = socket.assigns[:current_user]
     channel_id = socket.assigns[:channel_id]
 
     case Chat.send_message(channel_id, user.id, content) do
@@ -62,7 +62,7 @@ defmodule KodaWeb.RoomChannel do
   end
 
   def handle_in("typing", %{"typing" => typing}, socket) do
-    user       = Guardian.Phoenix.Socket.current_resource(socket)
+    user       = socket.assigns[:current_user]
     channel_id = socket.assigns[:channel_id]
     broadcast_from(socket, "typing", %{
       user_id:  user.id,
