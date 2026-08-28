@@ -112,6 +112,7 @@ defmodule Koda.Chat do
         "content"     => m.content,
         "encrypted"   => m.encrypted,
         "reply_to_id" => Map.get(m, :reply_to_id),
+        "reply_to"    => get_reply_preview(Map.get(m, :reply_to_id)),
         "inserted_at" => DateTime.to_iso8601(m.inserted_at)
       }
     end))
@@ -231,6 +232,19 @@ defmodule Koda.Chat do
       })
     end)
   end
+  defp get_reply_preview(nil), do: nil
+  defp get_reply_preview(reply_to_id) do
+    case Repo.get(Message, reply_to_id) do
+      nil -> nil
+      msg ->
+        author = case Repo.get(Koda.Auth.User, msg.sender_id) do
+          nil -> %{username: "Unknown"}
+          u   -> %{username: u.username}
+        end
+        %{id: msg.id, content: msg.content, author: author}
+    end
+  end
+
   # ── Mention processing ────────────────────────────────────────────────────
 
   defp process_mentions(channel_id, sender_id, content, msg) do
