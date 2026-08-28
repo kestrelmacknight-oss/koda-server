@@ -14,9 +14,6 @@ defmodule Koda.Servers.Channel do
     field :position,           :integer, default: 0
     field :is_subscriber_only, :boolean, default: false
     field :is_read_only,       :boolean, default: false
-    field :is_thread,           :boolean, default: false
-    field :parent_message_id,  :binary_id
-    field :thread_count,       :integer, default: 0
     belongs_to :server,   Koda.Servers.Server
     belongs_to :category, Koda.Servers.Category
     timestamps(type: :utc_datetime_usec)
