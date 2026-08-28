@@ -8,9 +8,15 @@ defmodule Koda.Servers.Channel do
     field :type,               :string, default: "text"
     field :description,        :string
     field :rules_content,       :string
+    field :is_thread,            :boolean, default: false
+    field :parent_message_id,   :binary_id
+    field :thread_count,        :integer, default: 0
     field :position,           :integer, default: 0
     field :is_subscriber_only, :boolean, default: false
     field :is_read_only,       :boolean, default: false
+    field :is_thread,           :boolean, default: false
+    field :parent_message_id,  :binary_id
+    field :thread_count,       :integer, default: 0
     belongs_to :server,   Koda.Servers.Server
     belongs_to :category, Koda.Servers.Category
     timestamps(type: :utc_datetime_usec)
@@ -18,7 +24,8 @@ defmodule Koda.Servers.Channel do
   def changeset(channel, attrs) do
     channel
     |> cast(attrs, [:name, :type, :description, :position, :rules_content,
-                    :is_subscriber_only, :is_read_only, :server_id, :category_id])
+                    :is_subscriber_only, :is_read_only, :is_thread,
+                    :parent_message_id, :thread_count, :server_id, :category_id])
     |> validate_required([:name, :server_id])
     |> validate_length(:name, min: 1, max: 100)
     |> validate_inclusion(:type, ["text", "voice", "gallery", "stage", "rules", "role-select"])

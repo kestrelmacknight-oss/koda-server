@@ -55,6 +55,7 @@ defmodule Koda.Chat do
   def send_message(channel_id, sender_id, content, opts \\ []) do
     sender_username = Keyword.get(opts, :sender_username, sender_id)
     encrypted       = Keyword.get(opts, :encrypted, false)
+    reply_to_id     = Keyword.get(opts, :reply_to_id, nil)
     message_id      = Ecto.UUID.generate()
     now             = DateTime.utc_now() |> DateTime.truncate(:second)
 
@@ -65,6 +66,7 @@ defmodule Koda.Chat do
               sender_id:   sender_id,
               content:     content,
               encrypted:   encrypted,
+              reply_to_id: reply_to_id,
               inserted_at: now
             })
          |> Repo.insert() do
@@ -109,6 +111,7 @@ defmodule Koda.Chat do
         "sender_id"   => m.sender_id,
         "content"     => m.content,
         "encrypted"   => m.encrypted,
+        "reply_to_id" => m.reply_to_id,
         "inserted_at" => DateTime.to_iso8601(m.inserted_at)
       }
     end))

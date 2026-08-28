@@ -197,6 +197,9 @@ defmodule KodaWeb.Router do
     get    "/dms/:conversation_id/messages",DmController, :messages
     post   "/dms/:conversation_id/messages",DmController, :send_message
 
+    # Threads
+    post   "/channels/:channel_id/threads",        ChannelController, :create_thread
+
     # Notifications
     get    "/notifications",                NotificationController, :index
     post   "/notifications/:id/read",       NotificationController, :mark_read

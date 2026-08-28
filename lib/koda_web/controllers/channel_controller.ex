@@ -83,7 +83,11 @@ defmodule KodaWeb.ChannelController do
     channel = Servers.get_channel(channel_id)
     if channel && Servers.get_member(channel.server_id, user.id) do
       encrypted = Map.get(params, "encrypted", false)
-      case Chat.send_message(channel_id, user.id, content, sender_username: user.username, encrypted: encrypted) do
+      reply_to_id = Map.get(params, "reply_to_id")
+      case Chat.send_message(channel_id, user.id, content,
+          sender_username: user.username,
+          encrypted: encrypted,
+          reply_to_id: reply_to_id) do
         {:ok, msg}   -> conn |> put_status(201) |> json(%{message: msg})
         {:error, _}  -> conn |> put_status(500) |> json(%{error: "Send failed"})
       end
@@ -106,6 +110,9 @@ defmodule KodaWeb.ChannelController do
       server_id: c.server_id, category_id: c.category_id,
       rules_content: Map.get(c, :rules_content),
       is_read_only: c.is_read_only,
+      is_thread: c.is_thread,
+      parent_message_id: c.parent_message_id,
+      thread_count: c.thread_count,
       allowed_role_ids: allowed_role_ids}
   end
 
@@ -115,5 +122,26 @@ defmodule KodaWeb.ChannelController do
         opts |> Keyword.get(String.to_existing_atom(k), k) |> to_string()
       end)
     end)
+  end
+  def create_thread(conn, %{"channel_id" => channel_id, "message_id" => message_id, "name" => name}) do
+    user = Guardian.Plug.current_resource(conn)
+    channel = Koda.Servers.get_channel(channel_id)
+    unless channel do
+      conn |> put_status(404) |> json(%{error: "Channel not found"})
+    else
+      case Koda.Servers.create_channel(channel.server_id, %{
+        "name" => name,
+        "type" => "text",
+        "is_thread" => true,
+        "parent_message_id" => message_id,
+        "category_id" => channel.category_id
+      }) do
+        {:ok, thread} ->
+          # Increment thread count on parent message
+          conn |> put_status(201) |> json(%{channel: channel_json(thread)})
+        {:error, cs} ->
+          conn |> put_status(422) |> json(%{errors: format_errors(cs)})
+      end
+    end
   end
 end
