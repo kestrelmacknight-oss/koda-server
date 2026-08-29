@@ -19,6 +19,7 @@ defmodule Koda.Chat do
       field :sender_id,   :binary_id
       field :content,     :string
       field :encrypted,   :boolean, default: false
+      field :reply_to_id, :binary_id
       field :inserted_at, :utc_datetime_usec
     end
 
