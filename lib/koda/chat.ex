@@ -208,9 +208,13 @@ defmodule Koda.Chat do
   end
 
   def get_reactions(message_id) do
+    binary_id = case Ecto.UUID.dump(message_id) do
+      {:ok, bin} -> bin
+      _ -> message_id
+    end
     {:ok, result} = Repo.query(
-      "SELECT emoji, user_id::text FROM message_reactions WHERE message_id = $1::uuid",
-      [message_id]
+      "SELECT emoji, user_id::text FROM message_reactions WHERE message_id = $1",
+      [binary_id]
     )
     result.rows
     |> Enum.group_by(fn [emoji, _] -> emoji end, fn [_, user_id] -> user_id end)
