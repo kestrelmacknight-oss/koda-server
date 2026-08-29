@@ -116,6 +116,7 @@ defmodule Koda.Chat do
         "encrypted"   => m.encrypted,
         "reply_to_id" => Map.get(m, :reply_to_id),
         "reply_to"    => get_reply_preview(Map.get(m, :reply_to_id)),
+        "reactions"   => get_reactions(m.id),
         "inserted_at" => DateTime.to_iso8601(m.inserted_at)
       }
     end))
