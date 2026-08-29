@@ -24,7 +24,7 @@ defmodule Koda.Chat do
 
     def changeset(m, attrs) do
       m
-      |> cast(attrs, [:id, :channel_id, :sender_id, :content, :encrypted, :inserted_at])
+      |> cast(attrs, [:id, :channel_id, :sender_id, :content, :encrypted, :reply_to_id, :inserted_at])
       |> validate_required([:channel_id, :sender_id, :content])
     end
   end
