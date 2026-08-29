@@ -243,7 +243,8 @@ defmodule Koda.Chat do
           nil -> %{username: "Unknown"}
           u   -> %{username: u.username}
         end
-        %{id: msg.id, content: msg.content, author: author}
+        content = if msg.encrypted, do: "[encrypted message]", else: msg.content
+        %{id: msg.id, content: content, author: author, encrypted: msg.encrypted}
     end
   end
 
