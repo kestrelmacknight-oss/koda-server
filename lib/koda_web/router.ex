@@ -197,6 +197,10 @@ defmodule KodaWeb.Router do
     get    "/dms/:conversation_id/messages",DmController, :messages
     post   "/dms/:conversation_id/messages",DmController, :send_message
 
+    # Reactions
+    post   "/messages/:message_id/reactions",         ReactionController, :add
+    delete "/messages/:message_id/reactions/:emoji",    ReactionController, :remove
+
     # Threads
     post   "/channels/:channel_id/threads",        ChannelController, :create_thread
 

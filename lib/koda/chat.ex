@@ -206,6 +206,33 @@ defmodule Koda.Chat do
     )
   end
 
+  def get_reactions(message_id) do
+    {:ok, result} = Repo.query(
+      "SELECT emoji, user_id::text FROM message_reactions WHERE message_id = $1::uuid",
+      [message_id]
+    )
+    result.rows
+    |> Enum.group_by(fn [emoji, _] -> emoji end, fn [_, user_id] -> user_id end)
+    |> Enum.map(fn {emoji, user_ids} -> %{emoji: emoji, count: length(user_ids), user_ids: user_ids} end)
+  end
+
+  def get_reactions_for_messages(message_ids) do
+    ids = Enum.join(Enum.map(message_ids, &"'#{&1}'"), ",")
+    {:ok, result} = Repo.query(
+      "SELECT message_id::text, emoji, user_id::text FROM message_reactions WHERE message_id = ANY($1::uuid[])",
+      [message_ids]
+    )
+    result.rows
+    |> Enum.group_by(fn [msg_id, _, _] -> msg_id end)
+    |> Enum.map(fn {msg_id, rows} ->
+      reactions = rows
+        |> Enum.group_by(fn [_, emoji, _] -> emoji end, fn [_, _, uid] -> uid end)
+        |> Enum.map(fn {emoji, uids} -> %{emoji: emoji, count: length(uids), user_ids: uids} end)
+      {msg_id, reactions}
+    end)
+    |> Map.new()
+  end
+
   # ── Author enrichment ─────────────────────────────────────────────────────
 
   defp enrich_with_authors(msgs) do
