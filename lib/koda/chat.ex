@@ -193,17 +193,24 @@ defmodule Koda.Chat do
 
   # ── Reactions ─────────────────────────────────────────────────────────────
 
+  defp to_uuid_binary(uuid) do
+    case Ecto.UUID.dump(uuid) do
+      {:ok, bin} -> bin
+      _ -> uuid
+    end
+  end
+
   def add_reaction(message_id, emoji, user_id) do
     Repo.query(
-      "INSERT INTO message_reactions (id, message_id, emoji, user_id) VALUES (gen_random_uuid(), $1::uuid, $2, $3::uuid) ON CONFLICT DO NOTHING",
-      [message_id, emoji, user_id]
+      "INSERT INTO message_reactions (id, message_id, emoji, user_id) VALUES (gen_random_uuid(), $1, $2, $3) ON CONFLICT DO NOTHING",
+      [to_uuid_binary(message_id), emoji, to_uuid_binary(user_id)]
     )
   end
 
   def remove_reaction(message_id, emoji, user_id) do
     Repo.query(
-      "DELETE FROM message_reactions WHERE message_id = $1::uuid AND emoji = $2 AND user_id = $3::uuid",
-      [message_id, emoji, user_id]
+      "DELETE FROM message_reactions WHERE message_id = $1 AND emoji = $2 AND user_id = $3",
+      [to_uuid_binary(message_id), emoji, to_uuid_binary(user_id)]
     )
   end
 
