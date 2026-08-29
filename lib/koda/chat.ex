@@ -82,6 +82,8 @@ defmodule Koda.Chat do
           author:      %{id: sender_id, username: sender_username, avatar_url: avatar_url},
           content:     content,
           encrypted:   encrypted,
+          reply_to_id: reply_to_id,
+          reply_to:    get_reply_preview(reply_to_id),
           inserted_at: DateTime.to_iso8601(now)
         }
         Phoenix.PubSub.broadcast(Koda.PubSub, "channel:#{channel_id}", {:new_message, msg})
