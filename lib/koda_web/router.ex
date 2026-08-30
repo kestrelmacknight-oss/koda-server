@@ -197,6 +197,14 @@ defmodule KodaWeb.Router do
     get    "/dms/:conversation_id/messages",DmController, :messages
     post   "/dms/:conversation_id/messages",DmController, :send_message
 
+    # Events / Calendar
+    get    "/channels/:channel_id/events",   EventsController, :index
+    post   "/channels/:channel_id/events",   EventsController, :create
+    patch  "/events/:id",                    EventsController, :update
+    delete "/events/:id",                    EventsController, :delete
+    post   "/events/:event_id/subscribe",    EventsController, :subscribe
+    delete "/events/:event_id/subscribe",    EventsController, :unsubscribe
+
     # Reactions
     post   "/messages/:message_id/reactions",         ReactionController, :add
     delete "/messages/:message_id/reactions/:emoji",    ReactionController, :remove
