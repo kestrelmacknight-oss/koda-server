@@ -25,7 +25,7 @@ defmodule Koda.Servers.Channel do
                     :parent_message_id, :thread_count, :server_id, :category_id])
     |> validate_required([:name, :server_id])
     |> validate_length(:name, min: 1, max: 100)
-    |> validate_inclusion(:type, ["text", "voice", "gallery", "stage", "rules", "role-select"])
+    |> validate_inclusion(:type, ["text", "voice", "gallery", "stage", "rules", "role-select", "calendar"])
   end
   def voice?(%__MODULE__{type: "voice"}), do: true
   def voice?(_), do: false
