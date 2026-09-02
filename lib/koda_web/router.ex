@@ -197,6 +197,17 @@ defmodule KodaWeb.Router do
     get    "/dms/:conversation_id/messages",DmController, :messages
     post   "/dms/:conversation_id/messages",DmController, :send_message
 
+    # Marketplace
+    get    "/marketplace/connect",                MarketplaceController, :connect_account
+    post   "/marketplace/connect/onboarding-url", MarketplaceController, :onboarding_url
+    post   "/marketplace/connect/sync",           MarketplaceController, :sync_account
+    get    "/marketplace/tip/preview",            MarketplaceController, :tip_preview
+    post   "/marketplace/tips",                   MarketplaceController, :create_tip
+    get    "/marketplace/subscription",           MarketplaceController, :subscription_info
+    post   "/marketplace/subscription",           MarketplaceController, :create_subscription
+    get    "/servers/:server_id/bank",            MarketplaceController, :server_bank
+
+    # Stripe webhooks (public — no auth)
     # Events / Calendar
     get    "/channels/:channel_id/events",   EventsController, :index
     post   "/channels/:channel_id/events",   EventsController, :create

@@ -85,3 +85,12 @@ if config_env() == :prod do
     format:   "$time $metadata[$level] $message\n",
     metadata: [:request_id, :user_id]
 end
+
+config :stripity_stripe,
+  api_key: System.get_env("STRIPE_SECRET_KEY"),
+  webhook_secret: System.get_env("STRIPE_WEBHOOK_SECRET")
+
+config :koda,
+  stripe_secret_key: System.get_env("STRIPE_SECRET_KEY"),
+  stripe_webhook_secret: System.get_env("STRIPE_WEBHOOK_SECRET"),
+  stripe_publishable_key: System.get_env("STRIPE_PUBLISHABLE_KEY")

@@ -35,6 +35,7 @@ defmodule Koda.MixProject do
       {:telemetry_poller,    "~> 1.1"},
       # Auth
       {:guardian,            "~> 2.3"},
+      {:stripity_stripe,     "~> 3.0"},
       {:guardian_db,         "~> 3.0"},
       {:bcrypt_elixir,       "~> 3.2"},
       # HTTP client
