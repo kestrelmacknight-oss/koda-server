@@ -14,6 +14,7 @@ defmodule KodaWeb.Router do
     pipe_through :api
 
     get  "/version",              VersionController, :index
+    post "/webhooks/stripe",         MarketplaceController, :webhook
     # Auth
     post "/auth/register",         AuthController, :register
     post "/auth/login",            AuthController, :login
