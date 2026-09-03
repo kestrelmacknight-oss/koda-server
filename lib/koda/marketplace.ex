@@ -385,6 +385,27 @@ defmodule Koda.Marketplace do
       _              -> :ok
     end
   end
+
+  def handle_webhook("account.updated", %{"id" => account_id}) do
+    # Sync Connect account status when Stripe notifies us of changes
+    case Repo.get_by(StripeConnectAccount, stripe_account_id: account_id) do
+      nil  -> :ok
+      acct ->
+        stripe_key = Application.get_env(:koda, :stripe_secret_key)
+        case Stripe.Account.retrieve(account_id, api_key: stripe_key) do
+          {:ok, stripe_acct} ->
+            acct
+            |> StripeConnectAccount.changeset(%{
+              onboarding_complete: stripe_acct.details_submitted,
+              payouts_enabled:     stripe_acct.payouts_enabled,
+              charges_enabled:     stripe_acct.charges_enabled
+            })
+            |> Repo.update()
+          _ -> :ok
+        end
+    end
+  end
+
   def handle_webhook(_, _), do: :ok
 
   # ── Queries ───────────────────────────────────────────────────────────────
