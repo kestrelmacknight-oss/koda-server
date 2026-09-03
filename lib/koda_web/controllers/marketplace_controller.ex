@@ -120,6 +120,23 @@ defmodule KodaWeb.MarketplaceController do
                  balance_usd: balance / 100.0})
   end
 
+  # ── Stripe health check ──────────────────────────────────────────────────────
+
+  def stripe_status(conn, _params) do
+    stripe_key = Application.get_env(:koda, :stripe_secret_key)
+    case Stripe.Balance.retrieve(api_key: stripe_key) do
+      {:ok, balance} ->
+        available = hd(balance.available)
+        json(conn, %{
+          connected: true,
+          currency: available.currency,
+          available_cents: available.amount
+        })
+      {:error, err} ->
+        conn |> put_status(422) |> json(%{connected: false, error: inspect(err)})
+    end
+  end
+
   # ── Stripe webhooks ───────────────────────────────────────────────────────
 
   def webhook(conn, _params) do
