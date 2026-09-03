@@ -180,13 +180,12 @@ defmodule Koda.Marketplace do
   # ── Tips ──────────────────────────────────────────────────────────────────
 
   def calculate_tip(amount_cents) do
-    fee_cents = round(amount_cents * @platform_fee_percent)
-    creator_cents = amount_cents - fee_cents
+    # Tips go 100% to creator — Stripe takes their standard fee automatically
     %{
       amount_cents:         amount_cents,
-      creator_amount_cents: creator_cents,
-      fee_cents:            fee_cents,
-      points_credited:      fee_cents  # 1pt per fee cent
+      creator_amount_cents: amount_cents,
+      fee_cents:            0,
+      points_credited:      0
     }
   end
 
@@ -207,7 +206,7 @@ defmodule Koda.Marketplace do
             currency: "usd",
             transfer_data: %{
               destination: connect_acct.stripe_account_id,
-              amount:       calc.creator_amount_cents
+              amount:       amount_cents
             },
             metadata: %{
               from_user_id: from_user_id,
