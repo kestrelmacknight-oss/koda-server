@@ -199,6 +199,7 @@ defmodule KodaWeb.Router do
     post   "/dms/:conversation_id/messages",DmController, :send_message
 
     # Marketplace
+    get    "/marketplace/stripe-status",          MarketplaceController, :stripe_status
     get    "/marketplace/connect",                MarketplaceController, :connect_account
     post   "/marketplace/connect/onboarding-url", MarketplaceController, :onboarding_url
     post   "/marketplace/connect/sync",           MarketplaceController, :sync_account
