@@ -198,6 +198,14 @@ defmodule KodaWeb.Router do
     get    "/dms/:conversation_id/messages",DmController, :messages
     post   "/dms/:conversation_id/messages",DmController, :send_message
 
+    # Server subscriptions
+    get    "/servers/:server_id/subscription-tiers",          ServerSubscriptionController, :list_tiers
+    post   "/servers/:server_id/subscription-tiers",          ServerSubscriptionController, :create_tier
+    patch  "/subscription-tiers/:id",                         ServerSubscriptionController, :update_tier
+    delete "/subscription-tiers/:id",                         ServerSubscriptionController, :delete_tier
+    get    "/servers/:server_id/my-subscription",             ServerSubscriptionController, :my_subscription
+    post   "/subscription-tiers/:tier_id/subscribe",          ServerSubscriptionController, :subscribe
+
     # Marketplace
     get    "/marketplace/stripe-status",          MarketplaceController, :stripe_status
     get    "/marketplace/connect",                MarketplaceController, :connect_account

@@ -380,9 +380,10 @@ defmodule Koda.Marketplace do
 
   def handle_webhook("payment_intent.succeeded", %{"id" => pi_id, "metadata" => meta}) do
     case meta["type"] do
-      "tip"          -> confirm_tip(pi_id)
-      "subscription" -> confirm_subscription(pi_id)
-      _              -> :ok
+      "tip"                  -> confirm_tip(pi_id)
+      "subscription"         -> confirm_subscription(pi_id)
+      "server_subscription"  -> Koda.ServerSubscriptions.confirm_subscription(pi_id)
+      _                      -> :ok
     end
   end
 
