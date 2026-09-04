@@ -11,7 +11,9 @@ defmodule KodaWeb.MarketplaceController do
         case Marketplace.create_connect_account(user.id) do
           {:ok, acct} -> json(conn, %{account_id: acct.stripe_account_id,
                                       onboarding_complete: false})
-          {:error, err} -> conn |> put_status(422) |> json(%{error: inspect(err)})
+          {:error, err} ->
+        IO.inspect(err, label: "Stripe Connect error")
+        conn |> put_status(422) |> json(%{error: inspect(err)})
         end
       acct ->
         json(conn, %{account_id: acct.stripe_account_id,
@@ -139,13 +141,15 @@ defmodule KodaWeb.MarketplaceController do
 
   # ── Stripe webhooks ───────────────────────────────────────────────────────
 
-  def webhook(conn, _params) do
+  def webhook(conn, params) do
     webhook_secret = Application.get_env(:koda, :stripe_webhook_secret)
-    payload = conn.assigns[:raw_body] || ""
+    payload = conn.assigns[:raw_body] || Jason.encode!(params)
     sig = get_req_header(conn, "stripe-signature") |> List.first()
 
-    case Stripe.WebhookPlug.construct_event(payload, sig, webhook_secret) do
-      {:ok, %Stripe.Event{type: type, data: %{object: object}}} ->
+    case Stripe.Webhook.construct_event(payload, sig, webhook_secret) do
+      {:ok, event} ->
+        type   = event["type"] || event[:type]
+        object = get_in(event, ["data", "object"]) || get_in(event, [:data, :object]) || %{}
         Task.start(fn -> Marketplace.handle_webhook(type, object) end)
         json(conn, %{ok: true})
       {:error, _} ->
