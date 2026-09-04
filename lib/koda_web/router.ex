@@ -209,6 +209,7 @@ defmodule KodaWeb.Router do
     # Marketplace
     get    "/marketplace/stripe-status",          MarketplaceController, :stripe_status
     get    "/marketplace/connect",                MarketplaceController, :connect_account
+    post   "/marketplace/connect",                MarketplaceController, :connect_account
     post   "/marketplace/connect/onboarding-url", MarketplaceController, :onboarding_url
     post   "/marketplace/connect/sync",           MarketplaceController, :sync_account
     get    "/marketplace/tip/preview",            MarketplaceController, :tip_preview
