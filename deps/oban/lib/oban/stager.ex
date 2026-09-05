@@ -1,0 +1,170 @@
+defmodule Oban.Stager do
+  @moduledoc false
+
+  use GenServer
+
+  alias Oban.{Engine, Job, Notifier, Peer, Plugin, Registry, Repo, Validation}
+  alias __MODULE__, as: State
+
+  require Logger
+
+  @type option :: Plugin.option() | {:interval, timeout()} | {:limit, pos_integer()}
+
+  defstruct [
+    :conf,
+    :timer,
+    interval: :timer.seconds(1),
+    limit: 5_000,
+    mode: :global
+  ]
+
+  @spec start_link([option()]) :: GenServer.on_start()
+  def start_link(opts) do
+    {name, opts} = Keyword.pop(opts, :name)
+
+    state = struct!(State, opts)
+
+    if state.interval == :infinity do
+      :ignore
+    else
+      GenServer.start_link(__MODULE__, state, name: name)
+    end
+  end
+
+  @spec validate([option()]) :: :ok | {:error, String.t()}
+  def validate(opts) do
+    Validation.validate_schema(opts,
+      conf: :any,
+      name: :any,
+      interval: :timeout,
+      limit: :pos_integer
+    )
+  end
+
+  @impl GenServer
+  def init(state) do
+    Process.flag(:trap_exit, true)
+
+    # Init event is essential for auto-allow and backward compatibility.
+    :telemetry.execute([:oban, :plugin, :init], %{}, %{conf: state.conf, plugin: __MODULE__})
+
+    {:ok, schedule_staging(state)}
+  end
+
+  @impl GenServer
+  def terminate(_reason, %State{timer: timer}) do
+    if is_reference(timer), do: Process.cancel_timer(timer)
+
+    :ok
+  end
+
+  @impl GenServer
+  def handle_info(:stage, %State{} = state) do
+    state = check_mode(state)
+    meta = %{conf: state.conf, leader: Peer.leader?(state.conf), plugin: __MODULE__}
+
+    :telemetry.span([:oban, :plugin], meta, fn ->
+      case stage_and_notify(meta.leader, state) do
+        {:ok, staged} ->
+          {:ok, Map.merge(meta, %{staged_count: length(staged), staged_jobs: staged})}
+
+        {:error, error} ->
+          {:error, Map.merge(meta, %{error: error, staged_count: 0, staged_jobs: []})}
+      end
+    end)
+
+    {:noreply, schedule_staging(state)}
+  end
+
+  def handle_info(message, state) do
+    Logger.warning(
+      [
+        message: "Received unexpected message: #{inspect(message)}",
+        source: :oban,
+        module: __MODULE__
+      ],
+      domain: [:oban]
+    )
+
+    {:noreply, state}
+  end
+
+  defp stage_and_notify(true = _leader, state) do
+    fun = fn ->
+      {:ok, staged} = Engine.stage_jobs(state.conf, Job, limit: state.limit)
+
+      notify_queues(state)
+
+      staged
+    end
+
+    case Repo.transaction(state.conf, fun, on_exhausted: :log) do
+      {:ok, _staged} = result ->
+        result
+
+      {:error, _reason} = result ->
+        # Force notifying in local mode after an unrecovered database exception. This ensures jobs
+        # keep processing when staging or database driven notifications fail.
+        safe_notify(state)
+
+        result
+    end
+  end
+
+  defp stage_and_notify(_leader, state) do
+    if state.mode == :local, do: notify_queues(state)
+
+    {:ok, []}
+  end
+
+  defp safe_notify(state) do
+    notify_queues(state)
+  rescue
+    _ -> notify_queues(%{state | mode: :local})
+  end
+
+  defp notify_queues(%{conf: conf, mode: :global} = state) do
+    {:ok, queues} = Engine.check_available(conf)
+
+    payload = Enum.map(queues, &%{queue: &1})
+
+    case Notifier.notify(conf, :insert, payload) do
+      :ok -> :ok
+      {:error, _reason} -> notify_queues(%{state | mode: :local})
+    end
+  end
+
+  defp notify_queues(%{conf: conf, mode: :local}) do
+    match = [{{{conf.name, {:producer, :"$1"}}, :"$2", :_}, [], [{{:"$1", :"$2"}}]}]
+
+    for {queue, pid} <- Registry.select(match) do
+      send(pid, {:notification, :insert, %{"queue" => queue}})
+    end
+
+    :ok
+  end
+
+  # Helpers
+
+  defp schedule_staging(state) do
+    timer = Process.send_after(self(), :stage, state.interval)
+
+    %{state | timer: timer}
+  end
+
+  defp check_mode(state) do
+    next_mode =
+      case Notifier.status(state.conf) do
+        :clustered -> :global
+        :isolated -> :local
+        :solitary -> if Peer.leader?(state.conf), do: :global, else: :local
+        :unknown -> state.mode
+      end
+
+    if state.mode != next_mode do
+      :telemetry.execute([:oban, :stager, :switch], %{}, %{conf: state.conf, mode: next_mode})
+    end
+
+    %{state | mode: next_mode}
+  end
+end

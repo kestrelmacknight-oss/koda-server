@@ -1,0 +1,13 @@
+{application,guardian_db,
+             [{optional_applications,[postgrex]},
+              {applications,[kernel,stdlib,elixir,logger,guardian,ecto,
+                             ecto_sql,postgrex]},
+              {description,"DB tracking for token validity"},
+              {modules,['Elixir.Guardian.DB','Elixir.Guardian.DB.Adapter',
+                        'Elixir.Guardian.DB.ETSAdapter',
+                        'Elixir.Guardian.DB.EctoAdapter',
+                        'Elixir.Guardian.DB.Sweeper',
+                        'Elixir.Guardian.DB.Token',
+                        'Elixir.Mix.Tasks.Guardian.Db.Gen.Migration']},
+              {registered,[]},
+              {vsn,"3.0.0"}]}.
