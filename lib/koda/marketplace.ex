@@ -383,6 +383,7 @@ defmodule Koda.Marketplace do
       "tip"                  -> confirm_tip(pi_id)
       "subscription"         -> confirm_subscription(pi_id)
       "server_subscription"  -> Koda.ServerSubscriptions.confirm_subscription(pi_id)
+      "digital_product"      -> Koda.DigitalProducts.confirm_purchase(pi_id)
       _                      -> :ok
     end
   end

@@ -198,6 +198,17 @@ defmodule KodaWeb.Router do
     get    "/dms/:conversation_id/messages",DmController, :messages
     post   "/dms/:conversation_id/messages",DmController, :send_message
 
+    # Digital products
+    get    "/products",                    DigitalProductsController, :index
+    get    "/products/purchases",          DigitalProductsController, :my_purchases
+    get    "/products/:id",                DigitalProductsController, :show
+    post   "/products",                    DigitalProductsController, :create
+    patch  "/products/:id",                DigitalProductsController, :update
+    delete "/products/:id",               DigitalProductsController, :delete
+    post   "/products/:id/license-keys",   DigitalProductsController, :add_license_keys
+    post   "/products/:id/purchase",       DigitalProductsController, :purchase
+    get    "/downloads/:token",            DigitalProductsController, :download
+
     # Server subscriptions
     get    "/servers/:server_id/subscription-tiers",          ServerSubscriptionController, :list_tiers
     post   "/servers/:server_id/subscription-tiers",          ServerSubscriptionController, :create_tier
