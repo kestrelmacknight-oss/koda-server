@@ -14,6 +14,7 @@ defmodule Koda.Upload do
   """
 
   @max_bytes 8 * 1024 * 1024
+  @digital_max_bytes 100 * 1024 * 1024
   @allowed_content_types ~w(
     image/jpeg image/png image/gif image/webp
     image/svg+xml image/avif
@@ -48,9 +49,13 @@ defmodule Koda.Upload do
   end
 
   defp validate_upload_type(t) do
-    if t in ["avatar", "gallery", "attachment"], do: :ok, else: {:error, :invalid_upload_type}
+    if t in ["avatar", "gallery", "attachment", "digital_product"], do: :ok, else: {:error, :invalid_upload_type}
   end
 
+  defp validate_size(body, type \\ "attachment") do
+    limit = if type == "digital_product", do: @digital_max_bytes, else: @max_bytes
+    if byte_size(body) > limit, do: {:error, :too_large}, else: :ok
+  end
   defp validate_size(body) when byte_size(body) > @max_bytes, do: {:error, :too_large}
   defp validate_size(_), do: :ok
 

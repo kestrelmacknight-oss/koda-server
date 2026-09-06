@@ -10,7 +10,8 @@ defmodule KodaWeb.UploadController do
     upload_type  = get_req_header(conn, "x-upload-type") |> List.first() || "attachment"
     content_type = get_req_header(conn, "content-type")  |> List.first() || "application/octet-stream"
 
-    {:ok, body, _conn} = Plug.Conn.read_body(conn, length: Upload.max_bytes() + 1)
+    max_len = if upload_type == "digital_product", do: 100 * 1024 * 1024 + 1, else: Upload.max_bytes() + 1
+    {:ok, body, _conn} = Plug.Conn.read_body(conn, length: max_len)
 
     case Upload.upload(user.id, upload_type, content_type, body) do
       {:ok, cdn_url} ->
