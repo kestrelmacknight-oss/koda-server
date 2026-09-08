@@ -162,16 +162,22 @@ defmodule Koda.Marketplace do
     case get_connect_account(user_id) do
       nil -> {:error, :no_account}
       acct ->
-        case Stripe.Account.retrieve(acct.stripe_account_id, api_key: stripe_key) do
-          {:ok, stripe_acct} ->
+        # Use Stripe API directly to retrieve connected account
+        url = "https://api.stripe.com/v1/accounts/#{acct.stripe_account_id}"
+        headers = [{"Authorization", "Bearer #{stripe_key}"}]
+        case :hackney.get(url, headers, "", [with_body: true]) do
+          {:ok, 200, _headers, body} ->
+            data = Jason.decode!(body)
             acct
             |> StripeConnectAccount.changeset(%{
-              onboarding_complete: stripe_acct.details_submitted,
-              payouts_enabled:     stripe_acct.payouts_enabled,
-              charges_enabled:     stripe_acct.charges_enabled,
-              country:             stripe_acct.country
+              onboarding_complete: data["details_submitted"] || false,
+              payouts_enabled:     data["payouts_enabled"] || false,
+              charges_enabled:     data["charges_enabled"] || false,
+              country:             data["country"]
             })
             |> Repo.update()
+          {:ok, status, _, body} ->
+            {:error, "Stripe returned #{status}: #{body}"}
           {:error, err} -> {:error, err}
         end
     end
@@ -394,13 +400,16 @@ defmodule Koda.Marketplace do
       nil  -> :ok
       acct ->
         stripe_key = Application.get_env(:koda, :stripe_secret_key)
-        case Stripe.Account.retrieve(account_id, api_key: stripe_key) do
-          {:ok, stripe_acct} ->
+        url = "https://api.stripe.com/v1/accounts/#{account_id}"
+        headers = [{"Authorization", "Bearer #{stripe_key}"}]
+        case :hackney.get(url, headers, "", [with_body: true]) do
+          {:ok, 200, _, body} ->
+            data = Jason.decode!(body)
             acct
             |> StripeConnectAccount.changeset(%{
-              onboarding_complete: stripe_acct.details_submitted,
-              payouts_enabled:     stripe_acct.payouts_enabled,
-              charges_enabled:     stripe_acct.charges_enabled
+              onboarding_complete: data["details_submitted"] || false,
+              payouts_enabled:     data["payouts_enabled"] || false,
+              charges_enabled:     data["charges_enabled"] || false
             })
             |> Repo.update()
           _ -> :ok
