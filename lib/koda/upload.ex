@@ -33,7 +33,7 @@ defmodule Koda.Upload do
   def upload(user_id, upload_type, content_type, body) do
     with :ok <- validate_content_type(content_type),
          :ok <- validate_upload_type(upload_type),
-         :ok <- validate_size(body) do
+         :ok <- validate_size(body, upload_type) do
       key     = build_key(user_id, upload_type, content_type)
       cdn_url = "#{cdn_base()}/#{key}"
 
@@ -56,8 +56,7 @@ defmodule Koda.Upload do
     limit = if type == "digital_product", do: @digital_max_bytes, else: @max_bytes
     if byte_size(body) > limit, do: {:error, :too_large}, else: :ok
   end
-  defp validate_size(body) when byte_size(body) > @max_bytes, do: {:error, :too_large}
-  defp validate_size(_), do: :ok
+
 
   defp put_object(key, body, content_type) do
     ExAws.S3.put_object(bucket(), key, body,
