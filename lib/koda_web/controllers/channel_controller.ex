@@ -144,4 +144,16 @@ defmodule KodaWeb.ChannelController do
       end
     end
   end
+  def reorder(conn, %{"server_id" => server_id, "order" => order}) do
+    # order is a list of %{id: uuid, position: int}
+    import Ecto.Query
+    Enum.each(order, fn %{"id" => id, "position" => pos} ->
+      Koda.Repo.update_all(
+        from(c in Koda.Servers.Channel,
+          where: c.id == ^id and c.server_id == ^server_id),
+        set: [position: pos]
+      )
+    end)
+    json(conn, %{ok: true})
+  end
 end

@@ -198,6 +198,10 @@ defmodule KodaWeb.Router do
     get    "/dms/:conversation_id/messages",DmController, :messages
     post   "/dms/:conversation_id/messages",DmController, :send_message
 
+    # Reordering
+    post   "/servers/:server_id/channels/reorder",    ChannelController, :reorder
+    post   "/servers/:server_id/categories/reorder",  CategoryController, :reorder
+
     # Digital products
     get    "/products",                    DigitalProductsController, :index
     get    "/products/purchases",          DigitalProductsController, :my_purchases
