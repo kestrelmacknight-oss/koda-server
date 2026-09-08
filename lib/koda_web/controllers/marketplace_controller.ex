@@ -143,8 +143,10 @@ defmodule KodaWeb.MarketplaceController do
 
   def webhook(conn, params) do
     webhook_secret = Application.get_env(:koda, :stripe_webhook_secret)
-    payload = conn.assigns[:raw_body] || Jason.encode!(params)
+    raw = conn.assigns[:raw_body]
+    payload = raw || Jason.encode!(params)
     sig = get_req_header(conn, "stripe-signature") |> List.first()
+    IO.puts("Webhook: raw_body_present=#{raw != nil}, sig_present=#{sig != nil}, payload_len=#{byte_size(payload)}")
 
     case Stripe.Webhook.construct_event(payload, sig, webhook_secret) do
       {:ok, event} ->
