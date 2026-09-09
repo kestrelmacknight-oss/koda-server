@@ -70,6 +70,36 @@ defmodule KodaWeb.ServerController do
     end
   end
 
+  def member_presence(conn, %{"id" => server_id}) do
+    # Get all members then check presence across their channels
+    members = Koda.Servers.list_members(server_id)
+    online_user_ids = members
+    |> Enum.flat_map(fn m ->
+      # Check if user is in any channel of this server
+      Koda.Servers.list_channels(server_id)
+      |> Enum.flat_map(fn c ->
+        KodaWeb.Presence.list("channel:#{c.id}")
+        |> Map.values()
+        |> Enum.map(fn %{metas: [meta | _]} -> meta.user_id end)
+      end)
+    end)
+    |> Enum.uniq()
+    |> MapSet.new()
+
+    presence = Enum.map(members, fn m ->
+      %{
+        user_id:  m.user_id,
+        username: m.user.username,
+        avatar_url: m.user.avatar_url,
+        online: MapSet.member?(online_user_ids, m.user_id),
+        roles: Enum.map(m.roles, fn r ->
+          %{id: r.id, name: r.name, color: r.color}
+        end)
+      }
+    end)
+    json(conn, %{presence: presence})
+  end
+
   def leave(conn, %{"server_id" => id}) do
     user = Guardian.Plug.current_resource(conn)
     Servers.remove_member(id, user.id)

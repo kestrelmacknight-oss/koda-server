@@ -107,6 +107,7 @@ defmodule KodaWeb.Router do
     patch  "/servers/:id",                  ServerController, :update
     delete "/servers/:id",                  ServerController, :delete
     get    "/servers/:id/members",          ServerController, :members
+    get    "/servers/:id/presence",          ServerController, :member_presence
     delete "/servers/:server_id/members",   ServerController, :leave
 
     # Channels
