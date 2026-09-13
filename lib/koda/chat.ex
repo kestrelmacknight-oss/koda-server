@@ -23,12 +23,26 @@ defmodule Koda.Chat do
       field :inserted_at, :utc_datetime_usec
       field :edited_at,   :utc_datetime_usec
       field :pinned_at,   :utc_datetime_usec
+      field :attachment_url,          :string
+      field :attachment_content_type, :string
     end
 
     def changeset(m, attrs) do
       m
-      |> cast(attrs, [:id, :channel_id, :sender_id, :content, :encrypted, :reply_to_id, :inserted_at])
-      |> validate_required([:channel_id, :sender_id, :content])
+      |> cast(attrs, [:id, :channel_id, :sender_id, :content, :encrypted, :reply_to_id,
+                      :inserted_at, :attachment_url, :attachment_content_type])
+      |> validate_required([:channel_id, :sender_id])
+      |> validate_content_or_attachment()
+    end
+
+    defp validate_content_or_attachment(changeset) do
+      content    = get_field(changeset, :content)
+      attachment = get_field(changeset, :attachment_url)
+      if (content && content != "") || attachment do
+        changeset
+      else
+        add_error(changeset, :content, "can't be blank without an attachment")
+      end
     end
   end
 
@@ -44,11 +58,14 @@ defmodule Koda.Chat do
       field :content,         :string
       field :encrypted,       :boolean, default: false
       field :inserted_at,     :utc_datetime_usec
+      field :attachment_url,          :string
+      field :attachment_content_type, :string
     end
 
     def changeset(m, attrs) do
       m
-      |> cast(attrs, [:id, :conversation_id, :sender_id, :content, :encrypted, :inserted_at])
+      |> cast(attrs, [:id, :conversation_id, :sender_id, :content, :encrypted,
+                      :inserted_at, :attachment_url, :attachment_content_type])
       |> validate_required([:conversation_id, :sender_id, :content])
     end
   end
@@ -56,11 +73,13 @@ defmodule Koda.Chat do
   # ── Channel messages ──────────────────────────────────────────────────────
 
   def send_message(channel_id, sender_id, content, opts \\ []) do
-    sender_username = Keyword.get(opts, :sender_username, sender_id)
-    encrypted       = Keyword.get(opts, :encrypted, false)
-    reply_to_id     = Keyword.get(opts, :reply_to_id, nil)
-    message_id      = Ecto.UUID.generate()
-    now             = DateTime.utc_now() |> DateTime.truncate(:second)
+    sender_username    = Keyword.get(opts, :sender_username, sender_id)
+    encrypted          = Keyword.get(opts, :encrypted, false)
+    reply_to_id        = Keyword.get(opts, :reply_to_id, nil)
+    attachment_url     = Keyword.get(opts, :attachment_url, nil)
+    attachment_type    = Keyword.get(opts, :attachment_content_type, nil)
+    message_id         = Ecto.UUID.generate()
+    now                = DateTime.utc_now() |> DateTime.truncate(:second)
 
     case %Message{}
          |> Message.changeset(%{
@@ -70,7 +89,9 @@ defmodule Koda.Chat do
               content:     content,
               encrypted:   encrypted,
               reply_to_id: reply_to_id,
-              inserted_at: now
+              inserted_at: now,
+              attachment_url:          attachment_url,
+              attachment_content_type: attachment_type
             })
          |> Repo.insert() do
       {:ok, _} ->
@@ -87,7 +108,9 @@ defmodule Koda.Chat do
           encrypted:   encrypted,
           reply_to_id: reply_to_id,
           reply_to:    get_reply_preview(reply_to_id),
-          inserted_at: DateTime.to_iso8601(now)
+          inserted_at: DateTime.to_iso8601(now),
+          attachment_url:          attachment_url,
+          attachment_content_type: attachment_type
         }
         Phoenix.PubSub.broadcast(Koda.PubSub, "channel:#{channel_id}", {:new_message, msg})
         # Process mentions asynchronously
@@ -121,7 +144,9 @@ defmodule Koda.Chat do
         "reactions"   => get_reactions(m.id),
         "inserted_at" => DateTime.to_iso8601(m.inserted_at),
         "edited_at"   => format_ts(m.edited_at),
-        "pinned_at"   => format_ts(m.pinned_at)
+        "pinned_at"   => format_ts(m.pinned_at),
+        "attachment_url"          => Map.get(m, :attachment_url),
+        "attachment_content_type" => Map.get(m, :attachment_content_type)
       }
     end))
   end

@@ -87,9 +87,11 @@ defmodule KodaWeb.ChannelController do
       case Chat.send_message(channel_id, user.id, content,
           sender_username: user.username,
           encrypted: encrypted,
-          reply_to_id: reply_to_id) do
+          reply_to_id: reply_to_id,
+          attachment_url: Map.get(params, "attachment_url"),
+          attachment_content_type: Map.get(params, "attachment_content_type")) do
         {:ok, msg}   -> conn |> put_status(201) |> json(%{message: msg})
-        {:error, _}  -> conn |> put_status(500) |> json(%{error: "Send failed"})
+        {:error, _}  -> conn |> put_status(422) |> json(%{error: "Send failed"})
       end
     else
       conn |> put_status(403) |> json(%{error: "Not authorized"})
