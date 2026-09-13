@@ -151,6 +151,10 @@ defmodule KodaWeb.Router do
     get    "/channels/:channel_id/messages",ChannelController, :messages
     post   "/channels/:channel_id/messages",ChannelController, :send_message
     post   "/channels/:channel_id/typing",  ChannelController, :typing
+    patch  "/channels/:channel_id/messages/:message_id",      ChannelController, :edit_message
+    post   "/channels/:channel_id/messages/:message_id/pin",  ChannelController, :pin_message
+    delete "/channels/:channel_id/messages/:message_id/pin",  ChannelController, :unpin_message
+    get    "/channels/:channel_id/pins",                      ChannelController, :pins
 
     # Voice
     get    "/channels/:channel_id/voice/token",        VoiceController, :token

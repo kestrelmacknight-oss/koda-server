@@ -85,5 +85,25 @@ defmodule KodaWeb.RoomChannel do
     {:noreply, socket}
   end
 
+  def handle_info({:message_deleted, message_id}, socket) do
+    push(socket, "message_deleted", %{id: message_id})
+    {:noreply, socket}
+  end
+
+  def handle_info({:message_edited, payload}, socket) do
+    push(socket, "message_edited", payload)
+    {:noreply, socket}
+  end
+
+  def handle_info({:message_pinned, payload}, socket) do
+    push(socket, "message_pinned", payload)
+    {:noreply, socket}
+  end
+
+  def handle_info({:message_unpinned, payload}, socket) do
+    push(socket, "message_unpinned", payload)
+    {:noreply, socket}
+  end
+
   def handle_info(_, socket), do: {:noreply, socket}
 end

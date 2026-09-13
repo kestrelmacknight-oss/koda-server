@@ -21,6 +21,8 @@ defmodule Koda.Chat do
       field :encrypted,   :boolean, default: false
       field :reply_to_id, :binary_id
       field :inserted_at, :utc_datetime_usec
+      field :edited_at,   :utc_datetime_usec
+      field :pinned_at,   :utc_datetime_usec
     end
 
     def changeset(m, attrs) do
@@ -117,10 +119,73 @@ defmodule Koda.Chat do
         "reply_to_id" => Map.get(m, :reply_to_id),
         "reply_to"    => get_reply_preview(Map.get(m, :reply_to_id)),
         "reactions"   => get_reactions(m.id),
-        "inserted_at" => DateTime.to_iso8601(m.inserted_at)
+        "inserted_at" => DateTime.to_iso8601(m.inserted_at),
+        "edited_at"   => format_ts(m.edited_at),
+        "pinned_at"   => format_ts(m.pinned_at)
       }
     end))
   end
+
+  # Only the original sender may edit their own message.
+  def edit_message(channel_id, message_id, sender_id, content) do
+    case Repo.get_by(Message, id: message_id, channel_id: channel_id, sender_id: sender_id) do
+      nil -> {:error, :not_found}
+      msg ->
+        now = DateTime.utc_now() |> DateTime.truncate(:second)
+        case msg |> Ecto.Changeset.change(content: content, edited_at: now) |> Repo.update() do
+          {:ok, updated} ->
+            payload = %{id: updated.id, channel_id: channel_id, content: content,
+                        edited_at: DateTime.to_iso8601(now)}
+            Phoenix.PubSub.broadcast(Koda.PubSub, "channel:#{channel_id}",
+              {:message_edited, payload})
+            {:ok, payload}
+          {:error, reason} -> {:error, reason}
+        end
+    end
+  end
+
+  def pin_message(channel_id, message_id), do: set_pinned(channel_id, message_id, DateTime.utc_now() |> DateTime.truncate(:second))
+  def unpin_message(channel_id, message_id), do: set_pinned(channel_id, message_id, nil)
+
+  defp set_pinned(channel_id, message_id, pinned_at) do
+    case Repo.get_by(Message, id: message_id, channel_id: channel_id) do
+      nil -> {:error, :not_found}
+      msg ->
+        case msg |> Ecto.Changeset.change(pinned_at: pinned_at) |> Repo.update() do
+          {:ok, _} ->
+            event = if pinned_at, do: :message_pinned, else: :message_unpinned
+            Phoenix.PubSub.broadcast(Koda.PubSub, "channel:#{channel_id}",
+              {event, %{id: message_id, channel_id: channel_id}})
+            :ok
+          {:error, reason} -> {:error, reason}
+        end
+    end
+  end
+
+  def list_pinned(channel_id) do
+    messages =
+      from(m in Message,
+        where: m.channel_id == ^channel_id and not is_nil(m.pinned_at),
+        order_by: [desc: m.pinned_at]
+      )
+      |> Repo.all()
+
+    enrich_with_authors(Enum.map(messages, fn m ->
+      %{
+        "id"          => m.id,
+        "channel_id"  => m.channel_id,
+        "sender_id"   => m.sender_id,
+        "content"     => m.content,
+        "encrypted"   => m.encrypted,
+        "inserted_at" => DateTime.to_iso8601(m.inserted_at),
+        "edited_at"   => format_ts(m.edited_at),
+        "pinned_at"   => format_ts(m.pinned_at)
+      }
+    end))
+  end
+
+  defp format_ts(nil), do: nil
+  defp format_ts(dt), do: DateTime.to_iso8601(dt)
 
   def delete_message(channel_id, message_id) do
     case Repo.get_by(Message, id: message_id, channel_id: channel_id) do

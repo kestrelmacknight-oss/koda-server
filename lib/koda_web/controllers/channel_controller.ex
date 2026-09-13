@@ -96,6 +96,55 @@ defmodule KodaWeb.ChannelController do
     end
   end
 
+  def edit_message(conn, %{"channel_id" => channel_id, "message_id" => message_id, "content" => content}) do
+    user = Guardian.Plug.current_resource(conn)
+    case Chat.edit_message(channel_id, message_id, user.id, content) do
+      {:ok, payload} -> json(conn, %{message: payload})
+      {:error, :not_found} -> conn |> put_status(404) |> json(%{error: "Message not found"})
+      {:error, _} -> conn |> put_status(500) |> json(%{error: "Edit failed"})
+    end
+  end
+
+  def pin_message(conn, %{"channel_id" => channel_id, "message_id" => message_id}) do
+    user = Guardian.Plug.current_resource(conn)
+    channel = Servers.get_channel(channel_id)
+    if channel && (Servers.owner?(channel.server_id, user.id) or
+                   Servers.member_can?(channel.server_id, user.id, "manage_messages")) do
+      case Chat.pin_message(channel_id, message_id) do
+        :ok -> json(conn, %{ok: true})
+        {:error, :not_found} -> conn |> put_status(404) |> json(%{error: "Message not found"})
+        {:error, _} -> conn |> put_status(500) |> json(%{error: "Pin failed"})
+      end
+    else
+      conn |> put_status(403) |> json(%{error: "Not authorized"})
+    end
+  end
+
+  def unpin_message(conn, %{"channel_id" => channel_id, "message_id" => message_id}) do
+    user = Guardian.Plug.current_resource(conn)
+    channel = Servers.get_channel(channel_id)
+    if channel && (Servers.owner?(channel.server_id, user.id) or
+                   Servers.member_can?(channel.server_id, user.id, "manage_messages")) do
+      case Chat.unpin_message(channel_id, message_id) do
+        :ok -> json(conn, %{ok: true})
+        {:error, :not_found} -> conn |> put_status(404) |> json(%{error: "Message not found"})
+        {:error, _} -> conn |> put_status(500) |> json(%{error: "Unpin failed"})
+      end
+    else
+      conn |> put_status(403) |> json(%{error: "Not authorized"})
+    end
+  end
+
+  def pins(conn, %{"channel_id" => channel_id}) do
+    user = Guardian.Plug.current_resource(conn)
+    channel = Servers.get_channel(channel_id)
+    if channel && Servers.get_member(channel.server_id, user.id) do
+      json(conn, %{messages: Chat.list_pinned(channel_id)})
+    else
+      conn |> put_status(403) |> json(%{error: "Not authorized"})
+    end
+  end
+
   def typing(conn, %{"channel_id" => channel_id}) do
     user = Guardian.Plug.current_resource(conn)
     Phoenix.PubSub.broadcast(Koda.PubSub, "channel:#{channel_id}",
