@@ -2,9 +2,10 @@ defmodule KodaWeb.VoiceController do
   use KodaWeb, :controller
   alias Koda.Voice
 
-  def token(conn, %{"channel_id" => channel_id}) do
+  def token(conn, %{"channel_id" => channel_id} = params) do
     user = Guardian.Plug.current_resource(conn)
-    case Voice.join_token(channel_id, user) do
+    opts = if params["viewer"] == "true", do: [viewer: true], else: []
+    case Voice.join_token(channel_id, user, opts) do
       {:ok, payload}              -> json(conn, payload)
       {:error, :channel_not_found}-> conn |> put_status(404) |> json(%{error: "Channel not found"})
       {:error, :unauthorized}     -> conn |> put_status(403) |> json(%{error: "Not a member"})

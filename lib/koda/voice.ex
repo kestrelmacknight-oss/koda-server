@@ -2,7 +2,7 @@ defmodule Koda.Voice do
   alias Koda.Voice.LiveKit
   alias Koda.Servers
 
-  def join_token(channel_id, user) do
+  def join_token(channel_id, user, opts \\ []) do
     channel = Servers.get_channel(channel_id)
 
     cond do
@@ -10,7 +10,19 @@ defmodule Koda.Voice do
       is_nil(Servers.get_member(channel.server_id, user.id)) -> {:error, :unauthorized}
       not Koda.Servers.Channel.voice?(channel)  -> {:error, :not_a_voice_channel}
       true ->
-        token = LiveKit.generate_token(user, channel_id)
+        # A pop-out window opens a second LiveKit connection alongside the
+        # main call window. Without a distinct identity, LiveKit's default
+        # single-connection-per-identity rule would boot the main session
+        # the moment the pop-out connects, so viewers get a "-view" suffixed
+        # identity and cannot publish (no duplicate mic/cam).
+        token_opts =
+          if Keyword.get(opts, :viewer, false) do
+            [identity_suffix: "-view", can_publish: false]
+          else
+            []
+          end
+
+        token = LiveKit.generate_token(user, channel_id, token_opts)
         url   = Application.get_env(:koda, :livekit, [])
                 |> Keyword.get(:public_url, "ws://localhost:7880")
         {:ok, %{token: token, url: url, room: LiveKit.room_name(channel_id)}}
