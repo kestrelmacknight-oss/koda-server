@@ -1,6 +1,6 @@
 defmodule KodaWeb.VoiceController do
   use KodaWeb, :controller
-  alias Koda.Voice
+  alias Koda.{Voice, Servers}
 
   def token(conn, %{"channel_id" => channel_id} = params) do
     user = Guardian.Plug.current_resource(conn)
@@ -14,9 +14,15 @@ defmodule KodaWeb.VoiceController do
   end
 
   def participants(conn, %{"channel_id" => channel_id}) do
-    case Voice.list_participants(channel_id) do
-      {:ok, ps} -> json(conn, %{participants: ps})
-      {:error, _} -> json(conn, %{participants: []})
+    user = Guardian.Plug.current_resource(conn)
+    channel = Servers.get_channel(channel_id)
+    if channel && Servers.member_can_view_channel?(channel, user.id) do
+      case Voice.list_participants(channel_id) do
+        {:ok, ps} -> json(conn, %{participants: ps})
+        {:error, _} -> json(conn, %{participants: []})
+      end
+    else
+      conn |> put_status(403) |> json(%{error: "Not authorized"})
     end
   end
 

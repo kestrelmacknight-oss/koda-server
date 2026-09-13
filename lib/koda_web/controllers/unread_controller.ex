@@ -13,6 +13,7 @@ defmodule KodaWeb.UnreadController do
       user.id
       |> Servers.list_user_servers()
       |> Enum.flat_map(&Servers.list_channels(&1.id))
+      |> Enum.filter(&Servers.member_can_view_channel?(&1, user.id))
       |> Enum.map(& &1.id)
 
     conversation_ids =

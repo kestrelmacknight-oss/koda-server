@@ -7,7 +7,10 @@ defmodule KodaWeb.ChannelController do
     unless Servers.get_member(server_id, user.id) do
       conn |> put_status(403) |> json(%{error: "Not a member"})
     else
-      channels = Servers.list_channels(server_id)
+      channels =
+        server_id
+        |> Servers.list_channels()
+        |> Enum.filter(&Servers.member_can_view_channel?(&1, user.id))
       json(conn, %{channels: Enum.map(channels, &channel_json/1)})
     end
   end
@@ -60,7 +63,7 @@ defmodule KodaWeb.ChannelController do
   def messages(conn, %{"channel_id" => channel_id} = params) do
     user = Guardian.Plug.current_resource(conn)
     channel = Servers.get_channel(channel_id)
-    if channel && Servers.get_member(channel.server_id, user.id) do
+    if channel && Servers.member_can_view_channel?(channel, user.id) do
       msgs = Chat.get_messages(channel_id, before_id: Map.get(params, "before"))
       json(conn, %{messages: msgs})
     else
@@ -69,19 +72,9 @@ defmodule KodaWeb.ChannelController do
   end
 
   def send_message(conn, %{"channel_id" => channel_id, "content" => content} = params) do
-    channel = Koda.Servers.get_channel(channel_id)
-    user = Guardian.Plug.current_resource(conn)
-    if channel && channel.is_read_only do
-      # Check if user has a role with manage_messages or send_messages permission
-      has_permission = Koda.Servers.member_can?(channel.server_id, user.id, "manage_messages") or
-                       Koda.Servers.owner?(channel.server_id, user.id)
-      unless has_permission do
-        conn |> put_status(403) |> json(%{error: "This channel is view only"}) |> halt()
-      end
-    end
     user    = Guardian.Plug.current_resource(conn)
     channel = Servers.get_channel(channel_id)
-    if channel && Servers.get_member(channel.server_id, user.id) do
+    if channel && Servers.member_can_send_message?(channel, user.id) do
       encrypted = Map.get(params, "encrypted", false)
       reply_to_id = Map.get(params, "reply_to_id")
       case Chat.send_message(channel_id, user.id, content,
@@ -163,7 +156,7 @@ defmodule KodaWeb.ChannelController do
   def pins(conn, %{"channel_id" => channel_id}) do
     user = Guardian.Plug.current_resource(conn)
     channel = Servers.get_channel(channel_id)
-    if channel && Servers.get_member(channel.server_id, user.id) do
+    if channel && Servers.member_can_view_channel?(channel, user.id) do
       json(conn, %{messages: Chat.list_pinned(channel_id)})
     else
       conn |> put_status(403) |> json(%{error: "Not authorized"})
@@ -173,7 +166,7 @@ defmodule KodaWeb.ChannelController do
   def mark_read(conn, %{"channel_id" => channel_id}) do
     user    = Guardian.Plug.current_resource(conn)
     channel = Servers.get_channel(channel_id)
-    if channel && Servers.get_member(channel.server_id, user.id) do
+    if channel && Servers.member_can_view_channel?(channel, user.id) do
       {:ok, _} = ReadStates.mark_read(user.id, "channel", channel_id)
       json(conn, %{ok: true})
     else
@@ -183,9 +176,14 @@ defmodule KodaWeb.ChannelController do
 
   def typing(conn, %{"channel_id" => channel_id}) do
     user = Guardian.Plug.current_resource(conn)
-    Phoenix.PubSub.broadcast(Koda.PubSub, "channel:#{channel_id}",
-      {:typing, %{user_id: user.id, username: user.username}})
-    json(conn, %{ok: true})
+    channel = Servers.get_channel(channel_id)
+    if channel && Servers.member_can_view_channel?(channel, user.id) do
+      Phoenix.PubSub.broadcast(Koda.PubSub, "channel:#{channel_id}",
+        {:typing, %{user_id: user.id, username: user.username}})
+      json(conn, %{ok: true})
+    else
+      conn |> put_status(403) |> json(%{error: "Not authorized"})
+    end
   end
 
   defp channel_json(c) do

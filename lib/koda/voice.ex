@@ -7,7 +7,7 @@ defmodule Koda.Voice do
 
     cond do
       is_nil(channel)                            -> {:error, :channel_not_found}
-      is_nil(Servers.get_member(channel.server_id, user.id)) -> {:error, :unauthorized}
+      not Servers.member_can_view_channel?(channel, user.id) -> {:error, :unauthorized}
       not Koda.Servers.Channel.voice?(channel)  -> {:error, :not_a_voice_channel}
       true ->
         # A pop-out window opens a second LiveKit connection alongside the
@@ -37,7 +37,9 @@ defmodule Koda.Voice do
     room       = get_in(event, ["room", "name"])
     identity   = get_in(event, ["participant", "identity"])
     channel_id = LiveKit.channel_id_from_room(room)
-    if channel_id && identity do
+    # "-view" identities are subscribe-only pop-out windows (see
+    # join_token/3), not real participants -- don't surface them.
+    if channel_id && identity && !String.ends_with?(identity, "-view") do
       meta = get_in(event, ["participant", "metadata"])
              |> case do
                nil -> %{}
@@ -53,7 +55,7 @@ defmodule Koda.Voice do
     room       = get_in(event, ["room", "name"])
     identity   = get_in(event, ["participant", "identity"])
     channel_id = LiveKit.channel_id_from_room(room)
-    if channel_id && identity do
+    if channel_id && identity && !String.ends_with?(identity, "-view") do
       Phoenix.PubSub.broadcast(Koda.PubSub, "voice:#{channel_id}",
         {:participant_left, identity})
     end
