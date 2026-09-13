@@ -15,6 +15,8 @@ defmodule KodaWeb.DmController do
     user = Guardian.Plug.current_resource(conn)
     case DirectMessages.open_conversation(user.id, other_id) do
       {:ok, c} -> json(conn, %{conversation: %{id: c.id}})
+      {:error, :dm_blocked} ->
+        conn |> put_status(403) |> json(%{error: "This user only accepts DMs from friends"})
       {:error, _} -> conn |> put_status(422) |> json(%{error: "Could not open conversation"})
     end
   end

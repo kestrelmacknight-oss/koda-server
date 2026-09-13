@@ -123,7 +123,8 @@ defmodule KodaWeb.AuthController do
   defp user_json(u) do
     %{id: u.id, username: u.username, email: u.email,
       display_name: u.display_name, avatar_url: u.avatar_url,
-      is_admin: u.is_admin, email_verified: u.email_verified}
+      is_admin: u.is_admin, email_verified: u.email_verified,
+      friends_only_dms: u.friends_only_dms}
   end
 
   defp format_errors(cs) do
