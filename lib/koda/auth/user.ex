@@ -21,6 +21,7 @@ defmodule Koda.Auth.User do
     field :settings,             :map, default: %{}
     field :flags,               :map, default: %{}
     field :friends_only_dms,    :boolean, default: false
+    field :throne_webhook_token, :string
     timestamps(type: :utc_datetime_usec)
   end
   def registration_changeset(user, attrs) do

@@ -29,6 +29,9 @@ defmodule KodaWeb.Router do
 
     # LiveKit webhook (signed by LiveKit, not user JWT)
     post "/livekit/webhook",       LiveKitWebhookController, :webhook
+
+    # Throne webhook (signed with Throne's Ed25519 key, routed by per-creator token)
+    post "/webhooks/throne/:token", ThroneController, :webhook
   end
 
   # -- Protected routes -------------------------------------------------------
@@ -191,6 +194,10 @@ defmodule KodaWeb.Router do
     post   "/friends/:user_id/block",           FriendsController, :block
     delete "/friends/:user_id/block",           FriendsController, :unblock
     patch  "/friends/privacy",                  FriendsController, :update_privacy
+    # Throne creator integration
+    get    "/throne/webhook_url",           ThroneController, :webhook_url
+    post   "/throne/webhook_url/regenerate",ThroneController, :regenerate_webhook_url
+
     # Invites
     get    "/servers/:server_id/invites",   InviteController, :index
     post   "/servers/:server_id/invites",   InviteController, :create

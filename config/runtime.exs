@@ -94,3 +94,10 @@ config :koda,
   stripe_secret_key: System.get_env("STRIPE_SECRET_KEY"),
   stripe_webhook_secret: System.get_env("STRIPE_WEBHOOK_SECRET"),
   stripe_publishable_key: System.get_env("STRIPE_PUBLISHABLE_KEY")
+
+# Throne's Ed25519 webhook-signing key is public by design (it verifies
+# Throne's signature, it doesn't authenticate us to Throne), so it's safe
+# to ship as the default here -- THRONE_PUBLIC_KEY_PEM only exists so it
+# can be rotated without a deploy if Throne ever reissues it.
+config :koda, :throne,
+  public_key_pem: System.get_env("THRONE_PUBLIC_KEY_PEM")
