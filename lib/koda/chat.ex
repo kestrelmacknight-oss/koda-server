@@ -61,12 +61,20 @@ defmodule Koda.Chat do
       field :inserted_at,     :utc_datetime_usec
       field :attachment_url,          :string
       field :attachment_content_type, :string
+      # Double Ratchet message header -- nil for legacy/plaintext rows.
+      field :ratchet_key, :string
+      field :msg_number,  :integer
+      field :prev_chain,  :integer
+      field :nonce,       :string
+      # X3DH handshake header, present only on a session-establishing message.
+      field :x3dh_header, :map
     end
 
     def changeset(m, attrs) do
       m
       |> cast(attrs, [:id, :conversation_id, :sender_id, :content, :encrypted,
-                      :inserted_at, :attachment_url, :attachment_content_type])
+                      :inserted_at, :attachment_url, :attachment_content_type,
+                      :ratchet_key, :msg_number, :prev_chain, :nonce, :x3dh_header])
       |> validate_required([:conversation_id, :sender_id, :content])
     end
   end
@@ -268,6 +276,11 @@ defmodule Koda.Chat do
   def send_dm_message(conversation_id, sender_id, content, opts \\ []) do
     sender_username = Keyword.get(opts, :sender_username, sender_id)
     encrypted       = Keyword.get(opts, :encrypted, false)
+    ratchet_key     = Keyword.get(opts, :ratchet_key, nil)
+    msg_number      = Keyword.get(opts, :msg_number, nil)
+    prev_chain      = Keyword.get(opts, :prev_chain, nil)
+    nonce           = Keyword.get(opts, :nonce, nil)
+    x3dh_header     = Keyword.get(opts, :x3dh_header, nil)
     message_id      = Ecto.UUID.generate()
     now             = DateTime.utc_now() |> DateTime.truncate(:second)
 
@@ -278,7 +291,12 @@ defmodule Koda.Chat do
               sender_id:       sender_id,
               content:         content,
               encrypted:       encrypted,
-              inserted_at:     now
+              inserted_at:     now,
+              ratchet_key:     ratchet_key,
+              msg_number:      msg_number,
+              prev_chain:      prev_chain,
+              nonce:           nonce,
+              x3dh_header:     x3dh_header
             })
          |> Repo.insert() do
       {:ok, _} ->
@@ -289,7 +307,12 @@ defmodule Koda.Chat do
           author:          %{id: sender_id, username: sender_username},
           content:         content,
           encrypted:       encrypted,
-          inserted_at:     DateTime.to_iso8601(now)
+          inserted_at:     DateTime.to_iso8601(now),
+          ratchet_key:     ratchet_key,
+          msg_number:      msg_number,
+          prev_chain:      prev_chain,
+          nonce:           nonce,
+          x3dh_header:     x3dh_header
         }
         Phoenix.PubSub.broadcast(Koda.PubSub, "dm:#{conversation_id}", {:new_message, msg})
         {:ok, msg}
@@ -316,7 +339,12 @@ defmodule Koda.Chat do
         "sender_id"       => m.sender_id,
         "content"         => m.content,
         "encrypted"       => m.encrypted,
-        "inserted_at"     => DateTime.to_iso8601(m.inserted_at)
+        "inserted_at"     => DateTime.to_iso8601(m.inserted_at),
+        "ratchet_key"     => Map.get(m, :ratchet_key),
+        "msg_number"      => Map.get(m, :msg_number),
+        "prev_chain"      => Map.get(m, :prev_chain),
+        "nonce"           => Map.get(m, :nonce),
+        "x3dh_header"     => Map.get(m, :x3dh_header)
       }
     end))
   end

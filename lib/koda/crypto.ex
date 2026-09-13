@@ -8,9 +8,9 @@ defmodule Koda.Crypto do
   sends the ciphertext. The server is a pure key directory, never a
   participant in the cryptographic operations.
 
-  OPK (one-time pre-key) consumption is not yet implemented -- keys are
-  returned but not marked used. This is acceptable for Alpha; add OPK
-  consumption before public launch.
+  OPKs are consumed (removed) on fetch via consume_opk/1 -- see
+  key_bundle_controller.ex show/2, which is deliberately a side-effecting
+  GET, same as Signal's own prekey directory.
   """
   import Ecto.Query
   alias Koda.Repo
@@ -65,10 +65,42 @@ defmodule Koda.Crypto do
 
   @doc """
   Fetch another user's public key bundle for X3DH initiation.
-  Returns the bundle without consuming OPKs (Alpha behaviour).
+  Returns the bundle without consuming OPKs -- use consume_opk/1 when
+  actually initiating a session (see key_bundle_controller.ex show/2).
   """
   def get_key_bundle(user_id) do
     Repo.get_by(KeyBundle, user_id: user_id)
+  end
+
+  @doc """
+  Pops one one-time prekey off a user's bundle for X3DH initiation and
+  persists its removal, so it can never be reused for a second session
+  (OPK reuse breaks X3DH's forward-secrecy guarantee for that handshake).
+
+  Row-locked so two concurrent initiations can't both be handed the same
+  OPK. Returns {:ok, {bundle, opk_or_nil, remaining_count}} -- opk is nil
+  when the bundle has none left (X3DH can still proceed with only
+  DH1-DH3; the caller just skips DH4). {:error, :not_found} if the user
+  has no bundle at all.
+  """
+  def consume_opk(user_id) do
+    Repo.transaction(fn ->
+      case Repo.one(from b in KeyBundle, where: b.user_id == ^user_id, lock: "FOR UPDATE") do
+        nil ->
+          Repo.rollback(:not_found)
+
+        %KeyBundle{opks: []} = bundle ->
+          {bundle, nil, 0}
+
+        %KeyBundle{opks: [opk | rest]} = bundle ->
+          {:ok, updated} =
+            bundle
+            |> Ecto.Changeset.change(opks: rest)
+            |> Repo.update()
+
+          {updated, opk, length(rest)}
+      end
+    end)
   end
 
   @doc """

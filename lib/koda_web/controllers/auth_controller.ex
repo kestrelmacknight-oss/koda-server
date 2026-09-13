@@ -116,10 +116,6 @@ defmodule KodaWeb.AuthController do
     end
   end
 
-  def get_keys(conn, _), do: json(conn, %{keys: []})
-  def upload_keys(conn, _), do: json(conn, %{ok: true})
-  def get_user_keys(conn, _), do: json(conn, %{keys: []})
-
   defp user_json(u) do
     %{id: u.id, username: u.username, email: u.email,
       display_name: u.display_name, avatar_url: u.avatar_url,

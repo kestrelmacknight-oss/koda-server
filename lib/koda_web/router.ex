@@ -45,16 +45,12 @@ defmodule KodaWeb.Router do
     post   "/auth/totp/setup",              AuthController, :totp_setup
 
     # Key bundles (E2EE / KCP)
-    put    "/keys/bundle",              KeyBundleController, :put
+    put    "/keys/bundle",              KeyBundleController, :upsert
     get    "/keys/bundle/status",       KeyBundleController, :status
-    get    "/keys/bundle/:user_id",     KeyBundleController, :get
+    get    "/keys/bundle/:user_id",     KeyBundleController, :show
 
-    # TEMPORARY -- remove once Scylla connection issue is resolved
     post   "/auth/totp/verify",             AuthController, :totp_verify
-    get    "/auth/keys",                    AuthController, :get_keys
-    put    "/auth/keys",                    AuthController, :upload_keys
     get    "/users/search",                 UserController, :search
-    get    "/users/:id/keys",               AuthController, :get_user_keys
 
     post "/import/discord/preview", ImportController, :preview
     post "/servers/:server_id/import/discord", ImportController, :apply

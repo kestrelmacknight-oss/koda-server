@@ -32,14 +32,20 @@ defmodule KodaWeb.DmController do
     end
   end
 
-  def send_message(conn, %{"conversation_id" => conv_id, "content" => content}) do
+  def send_message(conn, %{"conversation_id" => conv_id, "content" => content} = params) do
     user  = Guardian.Plug.current_resource(conn)
     convo = DirectMessages.get_conversation(conv_id, user.id)
     if convo do
       case DirectMessages.send_message(conv_id, user.id, content,
-             sender_username: user.username) do
+             sender_username: user.username,
+             encrypted:   Map.get(params, "encrypted", false),
+             ratchet_key: Map.get(params, "ratchet_key"),
+             msg_number:  Map.get(params, "msg_number"),
+             prev_chain:  Map.get(params, "prev_chain"),
+             nonce:       Map.get(params, "nonce"),
+             x3dh_header: Map.get(params, "x3dh_header")) do
         {:ok, msg}  -> conn |> put_status(201) |> json(%{message: msg})
-        {:error, _} -> conn |> put_status(500) |> json(%{error: "Send failed"})
+        {:error, _} -> conn |> put_status(422) |> json(%{error: "Send failed"})
       end
     else
       conn |> put_status(403) |> json(%{error: "Not authorized"})
