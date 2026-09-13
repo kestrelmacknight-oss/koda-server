@@ -122,15 +122,33 @@ defmodule Koda.Chat do
   end
 
   def get_messages(channel_id, opts \\ []) do
-    limit = Keyword.get(opts, :limit, 50)
+    limit     = Keyword.get(opts, :limit, 50)
+    before_id = Keyword.get(opts, :before_id)
+
+    # Cursor pagination for scrolling/searching further back in history --
+    # everything strictly older than the given message.
+    before_ts =
+      case before_id && Repo.get(Message, before_id) do
+        %Message{inserted_at: ts} -> ts
+        _ -> nil
+      end
 
     messages =
-      from(m in Message,
-        where: m.channel_id == ^channel_id,
-        order_by: [desc: m.inserted_at],
-        limit: ^limit
-      )
-      |> Repo.all()
+      if before_ts do
+        from(m in Message,
+          where: m.channel_id == ^channel_id and m.inserted_at < ^before_ts,
+          order_by: [desc: m.inserted_at],
+          limit: ^limit
+        )
+        |> Repo.all()
+      else
+        from(m in Message,
+          where: m.channel_id == ^channel_id,
+          order_by: [desc: m.inserted_at],
+          limit: ^limit
+        )
+        |> Repo.all()
+      end
 
     enrich_with_authors(Enum.map(messages, fn m ->
       %{

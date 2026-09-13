@@ -61,7 +61,7 @@ defmodule KodaWeb.ChannelController do
     user = Guardian.Plug.current_resource(conn)
     channel = Servers.get_channel(channel_id)
     if channel && Servers.get_member(channel.server_id, user.id) do
-      msgs = Chat.get_messages(channel_id)
+      msgs = Chat.get_messages(channel_id, before_id: Map.get(params, "before"))
       json(conn, %{messages: msgs})
     else
       conn |> put_status(403) |> json(%{error: "Not authorized"})
