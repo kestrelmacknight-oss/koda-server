@@ -21,7 +21,14 @@ defmodule Koda.Upload do
     video/mp4 video/webm video/quicktime
     audio/mpeg audio/ogg audio/wav audio/webm
     application/pdf
+    application/octet-stream
   )
+  # octet-stream is for E2E-encrypted DM attachments (see
+  # lib/core/crypto/dm_attachments.dart client-side): the bytes are
+  # ciphertext by the time they reach here, so declaring the original
+  # image/video/etc mime type would be actively wrong -- the server
+  # (and CDN) never see plaintext content or the decryption key either
+  # way, both live only in the Double Ratchet-encrypted message content.
 
   def allowed_content_types, do: @allowed_content_types
   def max_bytes, do: @max_bytes
