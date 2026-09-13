@@ -25,12 +25,13 @@ defmodule Koda.Chat do
       field :pinned_at,   :utc_datetime_usec
       field :attachment_url,          :string
       field :attachment_content_type, :string
+      field :link_preview,            :map
     end
 
     def changeset(m, attrs) do
       m
       |> cast(attrs, [:id, :channel_id, :sender_id, :content, :encrypted, :reply_to_id,
-                      :inserted_at, :attachment_url, :attachment_content_type])
+                      :inserted_at, :attachment_url, :attachment_content_type, :link_preview])
       |> validate_required([:channel_id, :sender_id])
       |> validate_content_or_attachment()
     end
@@ -164,9 +165,30 @@ defmodule Koda.Chat do
         "edited_at"   => format_ts(m.edited_at),
         "pinned_at"   => format_ts(m.pinned_at),
         "attachment_url"          => Map.get(m, :attachment_url),
-        "attachment_content_type" => Map.get(m, :attachment_content_type)
+        "attachment_content_type" => Map.get(m, :attachment_content_type),
+        "link_preview"            => Map.get(m, :link_preview)
       }
     end))
+  end
+
+  # Attaches OG preview data the sender's own client already fetched for a
+  # URL in their message. The server never fetches link URLs itself --
+  # message content can be end-to-end encrypted, so the server usually
+  # can't even see the URL, and having it fetch arbitrary user-supplied
+  # URLs would be an SSRF hole against Fly's internal network anyway.
+  def set_link_preview(channel_id, message_id, sender_id, preview) do
+    case Repo.get_by(Message, id: message_id, channel_id: channel_id, sender_id: sender_id) do
+      nil -> {:error, :not_found}
+      msg ->
+        case msg |> Ecto.Changeset.change(link_preview: preview) |> Repo.update() do
+          {:ok, _} ->
+            payload = %{id: message_id, channel_id: channel_id, link_preview: preview}
+            Phoenix.PubSub.broadcast(Koda.PubSub, "channel:#{channel_id}",
+              {:link_preview_updated, payload})
+            {:ok, payload}
+          {:error, reason} -> {:error, reason}
+        end
+    end
   end
 
   # Only the original sender may edit their own message.

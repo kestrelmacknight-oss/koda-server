@@ -155,6 +155,7 @@ defmodule KodaWeb.Router do
     post   "/channels/:channel_id/messages",ChannelController, :send_message
     post   "/channels/:channel_id/typing",  ChannelController, :typing
     patch  "/channels/:channel_id/messages/:message_id",      ChannelController, :edit_message
+    patch  "/channels/:channel_id/messages/:message_id/link_preview", ChannelController, :set_link_preview
     post   "/channels/:channel_id/messages/:message_id/pin",  ChannelController, :pin_message
     delete "/channels/:channel_id/messages/:message_id/pin",  ChannelController, :unpin_message
     get    "/channels/:channel_id/pins",                      ChannelController, :pins

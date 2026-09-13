@@ -107,6 +107,29 @@ defmodule KodaWeb.ChannelController do
     end
   end
 
+  def set_link_preview(conn, %{"channel_id" => channel_id, "message_id" => message_id, "link_preview" => preview}) do
+    user = Guardian.Plug.current_resource(conn)
+    case Chat.set_link_preview(channel_id, message_id, user.id, sanitize_preview(preview)) do
+      {:ok, payload} -> json(conn, %{message: payload})
+      {:error, :not_found} -> conn |> put_status(404) |> json(%{error: "Message not found"})
+      {:error, _} -> conn |> put_status(500) |> json(%{error: "Could not attach preview"})
+    end
+  end
+
+  defp sanitize_preview(%{} = preview) do
+    %{
+      "url"         => truncate(preview["url"], 2048),
+      "title"       => truncate(preview["title"], 300),
+      "description" => truncate(preview["description"], 500),
+      "image_url"   => truncate(preview["image_url"], 2048)
+    }
+  end
+  defp sanitize_preview(_), do: %{}
+
+  defp truncate(nil, _), do: nil
+  defp truncate(s, max) when is_binary(s), do: String.slice(s, 0, max)
+  defp truncate(_, _), do: nil
+
   def pin_message(conn, %{"channel_id" => channel_id, "message_id" => message_id}) do
     user = Guardian.Plug.current_resource(conn)
     channel = Servers.get_channel(channel_id)
