@@ -161,6 +161,10 @@ defmodule KodaWeb.Router do
     get    "/channels/:channel_id/pins",                      ChannelController, :pins
     post   "/channels/:channel_id/read",                      ChannelController, :mark_read
 
+    # GIF picker (Giphy proxy -- key stays server-side)
+    get    "/gifs/search",                  GiphyController, :search
+    get    "/gifs/trending",                GiphyController, :trending
+
     # Unread badges (channels + DMs, one bulk fetch)
     get    "/unread_counts",                UnreadController, :index
 

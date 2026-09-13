@@ -101,3 +101,6 @@ config :koda,
 # can be rotated without a deploy if Throne ever reissues it.
 config :koda, :throne,
   public_key_pem: System.get_env("THRONE_PUBLIC_KEY_PEM")
+
+config :koda, :giphy,
+  api_key: System.get_env("GIPHY_API_KEY")
