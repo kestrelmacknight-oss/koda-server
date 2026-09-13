@@ -158,6 +158,10 @@ defmodule KodaWeb.Router do
     post   "/channels/:channel_id/messages/:message_id/pin",  ChannelController, :pin_message
     delete "/channels/:channel_id/messages/:message_id/pin",  ChannelController, :unpin_message
     get    "/channels/:channel_id/pins",                      ChannelController, :pins
+    post   "/channels/:channel_id/read",                      ChannelController, :mark_read
+
+    # Unread badges (channels + DMs, one bulk fetch)
+    get    "/unread_counts",                UnreadController, :index
 
     # Voice
     get    "/channels/:channel_id/voice/token",        VoiceController, :token
@@ -209,6 +213,8 @@ defmodule KodaWeb.Router do
     post   "/dms/conversations",            DmController, :open_conversation
     get    "/dms/:conversation_id/messages",DmController, :messages
     post   "/dms/:conversation_id/messages",DmController, :send_message
+    post   "/dms/:conversation_id/read",    DmController, :mark_read
+    get    "/dms/:conversation_id/read_state",DmController, :read_state
 
     # Reordering
     post   "/servers/:server_id/channels/reorder",    ChannelController, :reorder

@@ -1,6 +1,6 @@
 defmodule KodaWeb.ChannelController do
   use KodaWeb, :controller
-  alias Koda.{Servers, Chat}
+  alias Koda.{Servers, Chat, ReadStates}
 
   def index(conn, %{"server_id" => server_id}) do
     user = Guardian.Plug.current_resource(conn)
@@ -142,6 +142,17 @@ defmodule KodaWeb.ChannelController do
     channel = Servers.get_channel(channel_id)
     if channel && Servers.get_member(channel.server_id, user.id) do
       json(conn, %{messages: Chat.list_pinned(channel_id)})
+    else
+      conn |> put_status(403) |> json(%{error: "Not authorized"})
+    end
+  end
+
+  def mark_read(conn, %{"channel_id" => channel_id}) do
+    user    = Guardian.Plug.current_resource(conn)
+    channel = Servers.get_channel(channel_id)
+    if channel && Servers.get_member(channel.server_id, user.id) do
+      {:ok, _} = ReadStates.mark_read(user.id, "channel", channel_id)
+      json(conn, %{ok: true})
     else
       conn |> put_status(403) |> json(%{error: "Not authorized"})
     end

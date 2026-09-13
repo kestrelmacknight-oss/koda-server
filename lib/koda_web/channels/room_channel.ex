@@ -105,5 +105,10 @@ defmodule KodaWeb.RoomChannel do
     {:noreply, socket}
   end
 
+  def handle_info({:conversation_read, payload}, socket) do
+    push(socket, "conversation_read", payload)
+    {:noreply, socket}
+  end
+
   def handle_info(_, socket), do: {:noreply, socket}
 end

@@ -1,6 +1,6 @@
 defmodule KodaWeb.DmController do
   use KodaWeb, :controller
-  alias Koda.{Chat, DirectMessages}
+  alias Koda.{Chat, DirectMessages, ReadStates}
 
   def list_conversations(conn, _) do
     user = Guardian.Plug.current_resource(conn)
@@ -41,6 +41,31 @@ defmodule KodaWeb.DmController do
         {:ok, msg}  -> conn |> put_status(201) |> json(%{message: msg})
         {:error, _} -> conn |> put_status(500) |> json(%{error: "Send failed"})
       end
+    else
+      conn |> put_status(403) |> json(%{error: "Not authorized"})
+    end
+  end
+
+  def mark_read(conn, %{"conversation_id" => conv_id}) do
+    user  = Guardian.Plug.current_resource(conn)
+    convo = DirectMessages.get_conversation(conv_id, user.id)
+    if convo do
+      {:ok, read_at} = ReadStates.mark_read(user.id, "dm", conv_id)
+      Phoenix.PubSub.broadcast(Koda.PubSub, "dm:#{conv_id}",
+        {:conversation_read, %{user_id: user.id, read_at: DateTime.to_iso8601(read_at)}})
+      json(conn, %{ok: true})
+    else
+      conn |> put_status(403) |> json(%{error: "Not authorized"})
+    end
+  end
+
+  def read_state(conn, %{"conversation_id" => conv_id}) do
+    user  = Guardian.Plug.current_resource(conn)
+    convo = DirectMessages.get_conversation(conv_id, user.id)
+    if convo do
+      peer_id = if convo.initiator_id == user.id, do: convo.recipient_id, else: convo.initiator_id
+      peer_read_at = ReadStates.last_read_at(peer_id, "dm", conv_id)
+      json(conn, %{peer_last_read_at: peer_read_at && DateTime.to_iso8601(peer_read_at)})
     else
       conn |> put_status(403) |> json(%{error: "Not authorized"})
     end
