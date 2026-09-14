@@ -2,7 +2,12 @@ defmodule KodaWeb.ServerSubscriptionController do
   use KodaWeb, :controller
   alias Koda.ServerSubscriptions
 
-  # ── Tier management (owner only) ──────────────────────────────────────────
+  # ── Tier management (owner, or a role with manage_marketplace) ─────────────
+
+  defp can_manage_marketplace?(server_id, user_id) do
+    Koda.Servers.owner?(server_id, user_id) or
+      Koda.Servers.member_can?(server_id, user_id, "manage_marketplace")
+  end
 
   def list_tiers(conn, %{"server_id" => server_id}) do
     tiers = ServerSubscriptions.list_tiers(server_id)
@@ -11,8 +16,8 @@ defmodule KodaWeb.ServerSubscriptionController do
 
   def create_tier(conn, %{"server_id" => server_id} = params) do
     user = Guardian.Plug.current_resource(conn)
-    unless Koda.Servers.owner?(server_id, user.id) do
-      conn |> put_status(403) |> json(%{error: "Only server owners can manage tiers"})
+    unless can_manage_marketplace?(server_id, user.id) do
+      conn |> put_status(403) |> json(%{error: "Not authorized to manage this server's marketplace"})
     else
       attrs = %{
         server_id:                    server_id,
@@ -39,8 +44,8 @@ defmodule KodaWeb.ServerSubscriptionController do
     case ServerSubscriptions.get_tier(id) do
       nil -> conn |> put_status(404) |> json(%{error: "Not found"})
       tier ->
-        unless Koda.Servers.owner?(tier.server_id, user.id) do
-          conn |> put_status(403) |> json(%{error: "Only server owners can manage tiers"})
+        unless can_manage_marketplace?(tier.server_id, user.id) do
+          conn |> put_status(403) |> json(%{error: "Not authorized to manage this server's marketplace"})
         else
           attrs = Map.take(params, ["name", "description", "price_cents",
                                     "role_id", "marketplace_discount_percent",
@@ -59,8 +64,8 @@ defmodule KodaWeb.ServerSubscriptionController do
     case ServerSubscriptions.get_tier(id) do
       nil -> conn |> put_status(404) |> json(%{error: "Not found"})
       tier ->
-        unless Koda.Servers.owner?(tier.server_id, user.id) do
-          conn |> put_status(403) |> json(%{error: "Only server owners can manage tiers"})
+        unless can_manage_marketplace?(tier.server_id, user.id) do
+          conn |> put_status(403) |> json(%{error: "Not authorized to manage this server's marketplace"})
         else
           ServerSubscriptions.delete_tier(tier)
           json(conn, %{ok: true})

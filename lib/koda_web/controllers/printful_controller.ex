@@ -5,7 +5,7 @@ defmodule KodaWeb.PrintfulController do
 
   defp can_manage?(server_id, user_id) do
     Servers.owner?(server_id, user_id) or
-      Servers.member_can?(server_id, user_id, "manage_server")
+      Servers.member_can?(server_id, user_id, "manage_marketplace")
   end
 
   def connect(conn, %{"server_id" => server_id}) do

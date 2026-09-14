@@ -1,6 +1,6 @@
 defmodule KodaWeb.DigitalProductsController do
   use KodaWeb, :controller
-  alias Koda.DigitalProducts
+  alias Koda.{DigitalProducts, Servers}
 
   # ── Product listing ───────────────────────────────────────────────────────
 
@@ -40,43 +40,62 @@ defmodule KodaWeb.DigitalProductsController do
   # ── Creator product management ────────────────────────────────────────────
 
   def create(conn, params) do
-    user = Guardian.Plug.current_resource(conn)
+    user         = Guardian.Plug.current_resource(conn)
+    price_cents  = params["price_cents"] || 0
+    server_id    = params["server_id"]
+    scope        = params["scope"] || "server"
 
-    # Must have Stripe Connect to sell paid products
-    price_cents = params["price_cents"] || 0
-    if price_cents > 0 do
-      case Koda.Marketplace.get_connect_account(user.id) do
-        nil ->
-          conn |> put_status(422) |> json(%{error: "Connect Stripe to sell paid products"})
-          |> halt()
-        acct ->
-          unless acct.charges_enabled do
-            conn |> put_status(422) |> json(%{error: "Complete Stripe onboarding first"})
-            |> halt()
-          end
-      end
+    cond do
+      # Must have Stripe Connect to sell paid products. Previously this
+      # check sent its 422 response but then fell through and created
+      # the product anyway -- `halt/1` only tells Phoenix's *pipeline*
+      # not to run further plugs, it doesn't stop the rest of this
+      # function's own code from executing. Restructured as a cond so
+      # only one branch's response is ever sent.
+      price_cents > 0 and not stripe_ready_to_sell?(user.id) ->
+        conn |> put_status(422) |> json(%{error: "Connect Stripe and complete onboarding to sell paid products"})
+
+      # A "this server only" listing represents the server's own
+      # storefront, not a personal cross-server product -- restrict who
+      # can create one the same way other server-management actions are
+      # gated. ("creator" scope, sold under the creator's own name
+      # across all of Koda, has no server to check against.)
+      scope == "server" and server_id && not can_manage_server?(server_id, user.id) ->
+        conn |> put_status(403) |> json(%{error: "Not authorized to list products for this server"})
+
+      true ->
+        attrs = %{
+          creator_id:       user.id,
+          server_id:        server_id,
+          free_for_tier_id: params["free_for_tier_id"],
+          title:            params["title"],
+          description:      params["description"],
+          price_cents:      price_cents,
+          product_type:     params["product_type"] || "file",
+          file_url:         params["file_url"],
+          file_name:        params["file_name"],
+          file_size_bytes:  params["file_size_bytes"],
+          scope:            scope
+        }
+
+        case DigitalProducts.create_product(attrs) do
+          {:ok, product} ->
+            conn |> put_status(201) |> json(%{product: DigitalProducts.product_json(product)})
+          {:error, cs} ->
+            conn |> put_status(422) |> json(%{errors: format_errors(cs)})
+        end
     end
+  end
 
-    attrs = %{
-      creator_id:       user.id,
-      server_id:        params["server_id"],
-      free_for_tier_id: params["free_for_tier_id"],
-      title:            params["title"],
-      description:      params["description"],
-      price_cents:      price_cents,
-      product_type:     params["product_type"] || "file",
-      file_url:         params["file_url"],
-      file_name:        params["file_name"],
-      file_size_bytes:  params["file_size_bytes"],
-      scope:            params["scope"] || "server"
-    }
-
-    case DigitalProducts.create_product(attrs) do
-      {:ok, product} ->
-        conn |> put_status(201) |> json(%{product: DigitalProducts.product_json(product)})
-      {:error, cs} ->
-        conn |> put_status(422) |> json(%{errors: format_errors(cs)})
+  defp stripe_ready_to_sell?(user_id) do
+    case Koda.Marketplace.get_connect_account(user_id) do
+      nil  -> false
+      acct -> acct.charges_enabled
     end
+  end
+
+  defp can_manage_server?(server_id, user_id) do
+    Servers.owner?(server_id, user_id) or Servers.member_can?(server_id, user_id, "manage_marketplace")
   end
 
   def update(conn, %{"id" => id} = params) do
