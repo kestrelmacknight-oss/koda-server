@@ -63,6 +63,7 @@ defmodule KodaWeb.ServerController do
         json(conn, %{members: Enum.map(members, fn m ->
           %{member_id: m.id, user_id: m.user_id, username: m.user.username,
             avatar_url: m.user.avatar_url, is_subscriber: m.is_subscriber,
+            koda_tier: m.user.koda_tier || "free",
             roles: Enum.map(m.roles, fn r ->
               %{id: r.id, name: r.name, color: r.color}
             end)}
@@ -91,6 +92,7 @@ defmodule KodaWeb.ServerController do
         user_id:  m.user_id,
         username: m.user.username,
         avatar_url: m.user.avatar_url,
+        koda_tier: m.user.koda_tier || "free",
         online: MapSet.member?(online_user_ids, m.user_id),
         roles: Enum.map(m.roles, fn r ->
           %{id: r.id, name: r.name, color: r.color}

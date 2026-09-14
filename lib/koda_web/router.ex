@@ -252,6 +252,11 @@ defmodule KodaWeb.Router do
     post   "/marketplace/subscription",           MarketplaceController, :create_subscription
     get    "/servers/:server_id/bank",            MarketplaceController, :server_bank
 
+    # Server boosting (Pulse subscriber perk)
+    get    "/boost_tokens",                       BoostController, :my_tokens
+    post   "/servers/:server_id/boost",            BoostController, :boost
+    get    "/servers/:server_id/boost_status",     BoostController, :status
+
     # Stripe webhooks (public — no auth)
     # Events / Calendar
     get    "/channels/:channel_id/events",   EventsController, :index

@@ -93,6 +93,6 @@ defmodule KodaWeb.FriendsController do
   end
 
   defp user_json(u) do
-    %{id: u.id, username: u.username, avatar_url: u.avatar_url}
+    %{id: u.id, username: u.username, avatar_url: u.avatar_url, koda_tier: u.koda_tier || "free"}
   end
 end

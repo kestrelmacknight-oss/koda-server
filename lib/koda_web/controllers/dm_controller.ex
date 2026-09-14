@@ -7,7 +7,8 @@ defmodule KodaWeb.DmController do
     convos = DirectMessages.list_conversations(user.id)
     json(conn, %{conversations: Enum.map(convos, fn c ->
       other = if c.initiator_id == user.id, do: c.recipient, else: c.initiator
-      %{id: c.id, user: %{id: other.id, username: other.username, avatar_url: other.avatar_url}}
+      %{id: c.id, user: %{id: other.id, username: other.username, avatar_url: other.avatar_url,
+                          koda_tier: other.koda_tier || "free"}}
     end)})
   end
 
