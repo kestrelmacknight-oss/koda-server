@@ -23,6 +23,9 @@ defmodule Koda.Auth.User do
     field :friends_only_dms,    :boolean, default: false
     field :throne_webhook_token, :string
     field :koda_tier,           :string, default: "free"
+    # "standard" | "child" -- only Koda.Parental ever sets "child"; never
+    # castable from the public registration_changeset below.
+    field :account_type,        :string, default: "standard"
     timestamps(type: :utc_datetime_usec)
   end
   def registration_changeset(user, attrs) do
@@ -41,6 +44,32 @@ defmodule Koda.Auth.User do
     |> unique_constraint(:email)
     |> downcase_email()
     |> hash_password()
+  end
+  @doc """
+  Creates a child account on behalf of a parent (see Koda.Parental).
+  Deliberately separate from registration_changeset/2: forces
+  account_type to "child" (a value that changeset never casts, so the
+  public /auth/register endpoint can never produce one) and skips email
+  verification -- there's no confirmation flow to run since the parent,
+  not the child, is the one asserting this account should exist.
+  """
+  def child_registration_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:username, :email, :password, :password_confirmation])
+    |> validate_required([:username, :email, :password])
+    |> validate_length(:username, min: 2, max: 32)
+    |> validate_format(:username, ~r/^[a-zA-Z0-9_]+$/,
+         message: "only letters, numbers, and underscores")
+    |> validate_length(:email, max: 160)
+    |> validate_format(:email, ~r/^[^\s]+@[^\s]+\.[^\s]+$/)
+    |> validate_length(:password, min: 8, max: 128)
+    |> validate_confirmation(:password, required: false)
+    |> unique_constraint(:username)
+    |> unique_constraint(:email)
+    |> downcase_email()
+    |> hash_password()
+    |> put_change(:account_type, "child")
+    |> put_change(:email_verified, true)
   end
   def update_changeset(user, attrs) do
     user

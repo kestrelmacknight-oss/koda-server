@@ -79,7 +79,13 @@ if config_env() == :prod do
   config :koda, Oban,
     engine:  Oban.Engines.Basic,
     repo:    Koda.Repo,
-    queues:  [default: 10, email: 5, notifications: 20]
+    queues:  [default: 10, email: 5, notifications: 20],
+    plugins: [
+      {Oban.Plugins.Cron,
+       crontab: [
+         {"* * * * *", Koda.Parental.ScheduleSweeper}
+       ]}
+    ]
 
   config :logger, :console,
     format:   "$time $metadata[$level] $message\n",

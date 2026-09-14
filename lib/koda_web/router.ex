@@ -7,6 +7,7 @@ defmodule KodaWeb.Router do
 
   pipeline :auth do
     plug Koda.Auth.Pipeline
+    plug Koda.Auth.ScheduleGate
   end
 
   # -- Public routes ----------------------------------------------------------
@@ -251,6 +252,19 @@ defmodule KodaWeb.Router do
     get    "/marketplace/subscription",           MarketplaceController, :subscription_info
     post   "/marketplace/subscription",           MarketplaceController, :create_subscription
     get    "/servers/:server_id/bank",            MarketplaceController, :server_bank
+
+    # Parental controls
+    post   "/parental/children",                             ParentalController, :create_child
+    get    "/parental/children",                              ParentalController, :list_children
+    get    "/parental/children/:child_id/friends",             ParentalController, :child_friends
+    delete "/parental/children/:child_id/friends/:friend_id",  ParentalController, :remove_child_friend
+    get    "/parental/children/:child_id/servers",              ParentalController, :child_servers
+    delete "/parental/children/:child_id/servers/:server_id",   ParentalController, :remove_child_from_server
+    get    "/parental/children/:child_id/schedule",             ParentalController, :get_schedule
+    put    "/parental/children/:child_id/schedule",             ParentalController, :put_schedule
+    delete "/parental/children/:child_id/schedule",             ParentalController, :delete_schedule
+    post   "/parental/children/:child_id/override",             ParentalController, :create_override
+    delete "/parental/children/:child_id/override",             ParentalController, :delete_override
 
     # Server boosting (Pulse subscriber perk)
     get    "/boost_tokens",                       BoostController, :my_tokens

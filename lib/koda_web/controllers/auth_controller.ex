@@ -37,6 +37,9 @@ defmodule KodaWeb.AuthController do
 
       {:error, :invalid_credentials} ->
         conn |> put_status(401) |> json(%{error: "Invalid email or password"})
+
+      {:error, :outside_schedule} ->
+        conn |> put_status(403) |> json(%{error: "outside_allowed_hours"})
     end
   end
 
@@ -121,7 +124,8 @@ defmodule KodaWeb.AuthController do
       display_name: u.display_name, avatar_url: u.avatar_url,
       is_admin: u.is_admin, email_verified: u.email_verified,
       friends_only_dms: u.friends_only_dms,
-      koda_tier: u.koda_tier || "free"}
+      koda_tier: u.koda_tier || "free",
+      account_type: u.account_type || "standard"}
   end
 
   defp format_errors(cs) do

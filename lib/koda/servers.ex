@@ -497,12 +497,25 @@ defmodule Koda.Servers do
   An empty allowed-roles list means "no restriction" at that level, same
   as Discord treating no overwrites as inherited/default access. Server
   owners always pass, same as every other permission check here.
+
+  A content-labeled channel is a hard, unconditional block for a child
+  account (see Koda.Parental) -- checked first, before the owner bypass,
+  since a child must never see labeled content even in a server they
+  happen to own. Standard accounts' hide/warn/show preference is a
+  personal, client-rendered choice (content_filters in their own
+  settings), not an access-control boundary, so it isn't checked here.
   """
   def member_can_view_channel?(%Channel{} = channel, user_id) do
-    owner?(channel.server_id, user_id) ||
-      (member_can?(channel.server_id, user_id, "view_channels") &&
-         roles_allow?(channel.server_id, user_id, get_category_allowed_roles_or_empty(channel.category_id)) &&
-         roles_allow?(channel.server_id, user_id, get_channel_allowed_roles(channel.id)))
+    not child_blocked?(channel, user_id) &&
+      (owner?(channel.server_id, user_id) ||
+         (member_can?(channel.server_id, user_id, "view_channels") &&
+            roles_allow?(channel.server_id, user_id, get_category_allowed_roles_or_empty(channel.category_id)) &&
+            roles_allow?(channel.server_id, user_id, get_channel_allowed_roles(channel.id))))
+  end
+
+  defp child_blocked?(%Channel{content_labels: []}, _user_id), do: false
+  defp child_blocked?(%Channel{}, user_id) do
+    match?(%{account_type: "child"}, Koda.Auth.get_user(user_id))
   end
 
   def member_can_view_channel?(channel_id, user_id) when is_binary(channel_id) do
