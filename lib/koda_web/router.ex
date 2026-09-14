@@ -33,6 +33,11 @@ defmodule KodaWeb.Router do
 
     # Throne webhook (signed with Throne's Ed25519 key, routed by per-creator token)
     post "/webhooks/throne/:token", ThroneController, :webhook
+
+    # Printful OAuth callback -- Printful redirects the browser here
+    # directly, with no Koda auth attached. Protected by the signed
+    # `state` param instead (see Koda.Printful.authorize_url/2).
+    get "/printful/oauth/callback", PrintfulController, :callback
   end
 
   # -- Protected routes -------------------------------------------------------
@@ -270,6 +275,11 @@ defmodule KodaWeb.Router do
     get    "/boost_tokens",                       BoostController, :my_tokens
     post   "/servers/:server_id/boost",            BoostController, :boost
     get    "/servers/:server_id/boost_status",     BoostController, :status
+
+    # Printful merch fulfillment (per-server OAuth connection)
+    post   "/servers/:server_id/printful/connect", PrintfulController, :connect
+    get    "/servers/:server_id/printful/status",  PrintfulController, :status
+    delete "/servers/:server_id/printful",         PrintfulController, :disconnect
 
     # Stripe webhooks (public — no auth)
     # Events / Calendar

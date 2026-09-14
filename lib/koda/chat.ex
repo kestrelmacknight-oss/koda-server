@@ -122,8 +122,10 @@ defmodule Koda.Chat do
           attachment_content_type: attachment_type
         }
         Phoenix.PubSub.broadcast(Koda.PubSub, "channel:#{channel_id}", {:new_message, msg})
-        # Process mentions asynchronously
+        # Process mentions and sidebar unread badges asynchronously --
+        # neither blocks the sender's own send from completing.
         Task.start(fn -> process_mentions(channel_id, sender_id, content, msg) end)
+        Task.start(fn -> broadcast_unread_bump(channel_id, sender_id) end)
         {:ok, msg}
       {:error, reason} ->
         {:error, reason}
@@ -446,6 +448,33 @@ defmodule Koda.Chat do
     end
   end
 
+  # Pushes a lightweight "this channel has a new message" signal to
+  # every other server member's per-user socket topic, so the sidebar
+  # can bump an unread badge for a channel the member isn't currently
+  # viewing (and therefore isn't subscribed to "channel:<id>" for) --
+  # see RoomChannel.handle_info({:unread_bump, _}, _). Doesn't filter by
+  # per-channel role visibility: a member who can't see this channel
+  # just receives a bump for a channel_id their client never rendered
+  # in the first place, which is harmless (matches how @everyone below
+  # already broadcasts to the full member list rather than computing
+  # per-channel visibility).
+  defp broadcast_unread_bump(channel_id, sender_id) do
+    import Ecto.Query
+    case Repo.get(Koda.Servers.Channel, channel_id) do
+      nil -> :ok
+      channel ->
+        member_ids = Repo.all(
+          from m in Koda.Servers.Member,
+          where: m.server_id == ^channel.server_id and m.user_id != ^sender_id,
+          select: m.user_id
+        )
+        Enum.each(member_ids, fn user_id ->
+          Phoenix.PubSub.broadcast(Koda.PubSub, "user:#{user_id}",
+            {:unread_bump, %{channel_id: channel_id, server_id: channel.server_id}})
+        end)
+    end
+  end
+
   # ── Mention processing ────────────────────────────────────────────────────
 
   defp process_mentions(channel_id, sender_id, content, msg) do
@@ -464,8 +493,15 @@ defmodule Koda.Chat do
                     message_id: msg.id, sender: sender_name}
 
     cond do
-      # @everyone -- notify all server members except sender
-      String.contains?(content, "@everyone") ->
+      # @everyone -- notify all server members except sender. Gated on
+      # the mention_everyone permission (same flag member_can?/3 already
+      # checks elsewhere) -- without this, anyone could type the literal
+      # text "@everyone" and trigger a full-server notification blast
+      # regardless of their role. A sender who lacks the permission just
+      # falls through to individual/role @mention scanning below, same
+      # as if they'd typed any other plain text.
+      String.contains?(content, "@everyone") and
+          Koda.Servers.member_can?(server_id, sender_id, "mention_everyone") ->
         members = Koda.Repo.all(
           from m in Koda.Servers.Member,
           where: m.server_id == ^server_id and m.user_id != ^sender_id,

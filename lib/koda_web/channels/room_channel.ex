@@ -183,5 +183,26 @@ defmodule KodaWeb.RoomChannel do
     {:noreply, socket}
   end
 
+  # Mention notifications (see Koda.Chat.push_notification/2) -- pushed
+  # on the per-user "user:<id>" topic, which every connected client
+  # already joins on login (see home_screen.dart's
+  # _subscribeToUserNotifications). This clause was missing entirely
+  # until now, so every {:notification, _} broadcast was silently
+  # dropped by the catch-all below -- mentions were detected and stored
+  # server-side but never actually delivered live.
+  def handle_info({:notification, notif}, socket) do
+    push(socket, "notification", notif)
+    {:noreply, socket}
+  end
+
+  # Lightweight "a channel you can see got a new message" signal, also
+  # on the per-user topic -- lets the client bump a channel's unread
+  # badge in the sidebar without having to join every channel's own
+  # topic just to watch for activity (see Koda.Chat.send_message/4).
+  def handle_info({:unread_bump, payload}, socket) do
+    push(socket, "unread_bump", payload)
+    {:noreply, socket}
+  end
+
   def handle_info(_, socket), do: {:noreply, socket}
 end
