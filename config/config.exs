@@ -54,7 +54,17 @@ config :cors_plug,
 config :koda, Oban,
   engine: Oban.Engines.Basic,
   repo:   Koda.Repo,
-  queues: [default: 10, email: 5, notifications: 20]
+  queues: [default: 10, email: 5, notifications: 20],
+  plugins: [
+    {Oban.Plugins.Cron,
+     crontab: [
+       # Force-disconnects a child account's live socket the moment
+       # their allowed window closes -- see Koda.Parental.ScheduleSweeper.
+       {"* * * * *", Koda.Parental.ScheduleSweeper}
+     ]}
+  ]
+
+config :elixir, :time_zone_database, Tzdata.TimeZoneDatabase
 
 config :hammer,
   backend: {Hammer.Backend.ETS,

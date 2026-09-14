@@ -10,7 +10,14 @@ defmodule KodaWeb.UserSocket do
       {:ok, claims} ->
         case Koda.Auth.Guardian.resource_from_claims(claims) do
           {:ok, user} ->
-            {:ok, Phoenix.Socket.assign(socket, :current_user, user)}
+            # A still-valid JWT from before a child's window closed must
+            # not be enough to open a live connection -- see
+            # Koda.Parental.ScheduleSweeper for the mid-session case.
+            if Koda.Parental.allowed_now?(user) do
+              {:ok, Phoenix.Socket.assign(socket, :current_user, user)}
+            else
+              :error
+            end
           {:error, _} -> :error
         end
       {:error, _} -> :error

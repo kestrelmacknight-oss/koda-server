@@ -21,12 +21,29 @@ defmodule Koda.Chat do
       field :encrypted,   :boolean, default: false
       field :reply_to_id, :binary_id
       field :inserted_at, :utc_datetime_usec
+      field :edited_at,   :utc_datetime_usec
+      field :pinned_at,   :utc_datetime_usec
+      field :attachment_url,          :string
+      field :attachment_content_type, :string
+      field :link_preview,            :map
     end
 
     def changeset(m, attrs) do
       m
-      |> cast(attrs, [:id, :channel_id, :sender_id, :content, :encrypted, :reply_to_id, :inserted_at])
-      |> validate_required([:channel_id, :sender_id, :content])
+      |> cast(attrs, [:id, :channel_id, :sender_id, :content, :encrypted, :reply_to_id,
+                      :inserted_at, :attachment_url, :attachment_content_type, :link_preview])
+      |> validate_required([:channel_id, :sender_id])
+      |> validate_content_or_attachment()
+    end
+
+    defp validate_content_or_attachment(changeset) do
+      content    = get_field(changeset, :content)
+      attachment = get_field(changeset, :attachment_url)
+      if (content && content != "") || attachment do
+        changeset
+      else
+        add_error(changeset, :content, "can't be blank without an attachment")
+      end
     end
   end
 
@@ -42,11 +59,22 @@ defmodule Koda.Chat do
       field :content,         :string
       field :encrypted,       :boolean, default: false
       field :inserted_at,     :utc_datetime_usec
+      field :attachment_url,          :string
+      field :attachment_content_type, :string
+      # Double Ratchet message header -- nil for legacy/plaintext rows.
+      field :ratchet_key, :string
+      field :msg_number,  :integer
+      field :prev_chain,  :integer
+      field :nonce,       :string
+      # X3DH handshake header, present only on a session-establishing message.
+      field :x3dh_header, :map
     end
 
     def changeset(m, attrs) do
       m
-      |> cast(attrs, [:id, :conversation_id, :sender_id, :content, :encrypted, :inserted_at])
+      |> cast(attrs, [:id, :conversation_id, :sender_id, :content, :encrypted,
+                      :inserted_at, :attachment_url, :attachment_content_type,
+                      :ratchet_key, :msg_number, :prev_chain, :nonce, :x3dh_header])
       |> validate_required([:conversation_id, :sender_id, :content])
     end
   end
@@ -54,11 +82,13 @@ defmodule Koda.Chat do
   # ── Channel messages ──────────────────────────────────────────────────────
 
   def send_message(channel_id, sender_id, content, opts \\ []) do
-    sender_username = Keyword.get(opts, :sender_username, sender_id)
-    encrypted       = Keyword.get(opts, :encrypted, false)
-    reply_to_id     = Keyword.get(opts, :reply_to_id, nil)
-    message_id      = Ecto.UUID.generate()
-    now             = DateTime.utc_now() |> DateTime.truncate(:second)
+    sender_username    = Keyword.get(opts, :sender_username, sender_id)
+    encrypted          = Keyword.get(opts, :encrypted, false)
+    reply_to_id        = Keyword.get(opts, :reply_to_id, nil)
+    attachment_url     = Keyword.get(opts, :attachment_url, nil)
+    attachment_type    = Keyword.get(opts, :attachment_content_type, nil)
+    message_id         = Ecto.UUID.generate()
+    now                = DateTime.utc_now() |> DateTime.truncate(:second)
 
     case %Message{}
          |> Message.changeset(%{
@@ -68,7 +98,9 @@ defmodule Koda.Chat do
               content:     content,
               encrypted:   encrypted,
               reply_to_id: reply_to_id,
-              inserted_at: now
+              inserted_at: now,
+              attachment_url:          attachment_url,
+              attachment_content_type: attachment_type
             })
          |> Repo.insert() do
       {:ok, _} ->
@@ -85,11 +117,15 @@ defmodule Koda.Chat do
           encrypted:   encrypted,
           reply_to_id: reply_to_id,
           reply_to:    get_reply_preview(reply_to_id),
-          inserted_at: DateTime.to_iso8601(now)
+          inserted_at: DateTime.to_iso8601(now),
+          attachment_url:          attachment_url,
+          attachment_content_type: attachment_type
         }
         Phoenix.PubSub.broadcast(Koda.PubSub, "channel:#{channel_id}", {:new_message, msg})
-        # Process mentions asynchronously
+        # Process mentions and sidebar unread badges asynchronously --
+        # neither blocks the sender's own send from completing.
         Task.start(fn -> process_mentions(channel_id, sender_id, content, msg) end)
+        Task.start(fn -> broadcast_unread_bump(channel_id, sender_id) end)
         {:ok, msg}
       {:error, reason} ->
         {:error, reason}
@@ -97,15 +133,33 @@ defmodule Koda.Chat do
   end
 
   def get_messages(channel_id, opts \\ []) do
-    limit = Keyword.get(opts, :limit, 50)
+    limit     = Keyword.get(opts, :limit, 50)
+    before_id = Keyword.get(opts, :before_id)
+
+    # Cursor pagination for scrolling/searching further back in history --
+    # everything strictly older than the given message.
+    before_ts =
+      case before_id && Repo.get(Message, before_id) do
+        %Message{inserted_at: ts} -> ts
+        _ -> nil
+      end
 
     messages =
-      from(m in Message,
-        where: m.channel_id == ^channel_id,
-        order_by: [desc: m.inserted_at],
-        limit: ^limit
-      )
-      |> Repo.all()
+      if before_ts do
+        from(m in Message,
+          where: m.channel_id == ^channel_id and m.inserted_at < ^before_ts,
+          order_by: [desc: m.inserted_at],
+          limit: ^limit
+        )
+        |> Repo.all()
+      else
+        from(m in Message,
+          where: m.channel_id == ^channel_id,
+          order_by: [desc: m.inserted_at],
+          limit: ^limit
+        )
+        |> Repo.all()
+      end
 
     enrich_with_authors(Enum.map(messages, fn m ->
       %{
@@ -117,10 +171,96 @@ defmodule Koda.Chat do
         "reply_to_id" => Map.get(m, :reply_to_id),
         "reply_to"    => get_reply_preview(Map.get(m, :reply_to_id)),
         "reactions"   => get_reactions(m.id),
-        "inserted_at" => DateTime.to_iso8601(m.inserted_at)
+        "inserted_at" => DateTime.to_iso8601(m.inserted_at),
+        "edited_at"   => format_ts(m.edited_at),
+        "pinned_at"   => format_ts(m.pinned_at),
+        "attachment_url"          => Map.get(m, :attachment_url),
+        "attachment_content_type" => Map.get(m, :attachment_content_type),
+        "link_preview"            => Map.get(m, :link_preview)
       }
     end))
   end
+
+  # Attaches OG preview data the sender's own client already fetched for a
+  # URL in their message. The server never fetches link URLs itself --
+  # message content can be end-to-end encrypted, so the server usually
+  # can't even see the URL, and having it fetch arbitrary user-supplied
+  # URLs would be an SSRF hole against Fly's internal network anyway.
+  def set_link_preview(channel_id, message_id, sender_id, preview) do
+    case Repo.get_by(Message, id: message_id, channel_id: channel_id, sender_id: sender_id) do
+      nil -> {:error, :not_found}
+      msg ->
+        case msg |> Ecto.Changeset.change(link_preview: preview) |> Repo.update() do
+          {:ok, _} ->
+            payload = %{id: message_id, channel_id: channel_id, link_preview: preview}
+            Phoenix.PubSub.broadcast(Koda.PubSub, "channel:#{channel_id}",
+              {:link_preview_updated, payload})
+            {:ok, payload}
+          {:error, reason} -> {:error, reason}
+        end
+    end
+  end
+
+  # Only the original sender may edit their own message.
+  def edit_message(channel_id, message_id, sender_id, content) do
+    case Repo.get_by(Message, id: message_id, channel_id: channel_id, sender_id: sender_id) do
+      nil -> {:error, :not_found}
+      msg ->
+        now = DateTime.utc_now() |> DateTime.truncate(:second)
+        case msg |> Ecto.Changeset.change(content: content, edited_at: now) |> Repo.update() do
+          {:ok, updated} ->
+            payload = %{id: updated.id, channel_id: channel_id, content: content,
+                        edited_at: DateTime.to_iso8601(now)}
+            Phoenix.PubSub.broadcast(Koda.PubSub, "channel:#{channel_id}",
+              {:message_edited, payload})
+            {:ok, payload}
+          {:error, reason} -> {:error, reason}
+        end
+    end
+  end
+
+  def pin_message(channel_id, message_id), do: set_pinned(channel_id, message_id, DateTime.utc_now() |> DateTime.truncate(:second))
+  def unpin_message(channel_id, message_id), do: set_pinned(channel_id, message_id, nil)
+
+  defp set_pinned(channel_id, message_id, pinned_at) do
+    case Repo.get_by(Message, id: message_id, channel_id: channel_id) do
+      nil -> {:error, :not_found}
+      msg ->
+        case msg |> Ecto.Changeset.change(pinned_at: pinned_at) |> Repo.update() do
+          {:ok, _} ->
+            event = if pinned_at, do: :message_pinned, else: :message_unpinned
+            Phoenix.PubSub.broadcast(Koda.PubSub, "channel:#{channel_id}",
+              {event, %{id: message_id, channel_id: channel_id}})
+            :ok
+          {:error, reason} -> {:error, reason}
+        end
+    end
+  end
+
+  def list_pinned(channel_id) do
+    messages =
+      from(m in Message,
+        where: m.channel_id == ^channel_id and not is_nil(m.pinned_at),
+        order_by: [desc: m.pinned_at]
+      )
+      |> Repo.all()
+
+    enrich_with_authors(Enum.map(messages, fn m ->
+      %{
+        "id"          => m.id,
+        "channel_id"  => m.channel_id,
+        "sender_id"   => m.sender_id,
+        "content"     => m.content,
+        "encrypted"   => m.encrypted,
+        "inserted_at" => DateTime.to_iso8601(m.inserted_at),
+        "edited_at"   => format_ts(m.edited_at),
+        "pinned_at"   => format_ts(m.pinned_at)
+      }
+    end))
+  end
+
+  defp format_ts(nil), do: nil
+  defp format_ts(dt), do: DateTime.to_iso8601(dt)
 
   def delete_message(channel_id, message_id) do
     case Repo.get_by(Message, id: message_id, channel_id: channel_id) do
@@ -138,6 +278,11 @@ defmodule Koda.Chat do
   def send_dm_message(conversation_id, sender_id, content, opts \\ []) do
     sender_username = Keyword.get(opts, :sender_username, sender_id)
     encrypted       = Keyword.get(opts, :encrypted, false)
+    ratchet_key     = Keyword.get(opts, :ratchet_key, nil)
+    msg_number      = Keyword.get(opts, :msg_number, nil)
+    prev_chain      = Keyword.get(opts, :prev_chain, nil)
+    nonce           = Keyword.get(opts, :nonce, nil)
+    x3dh_header     = Keyword.get(opts, :x3dh_header, nil)
     message_id      = Ecto.UUID.generate()
     now             = DateTime.utc_now() |> DateTime.truncate(:second)
 
@@ -148,7 +293,12 @@ defmodule Koda.Chat do
               sender_id:       sender_id,
               content:         content,
               encrypted:       encrypted,
-              inserted_at:     now
+              inserted_at:     now,
+              ratchet_key:     ratchet_key,
+              msg_number:      msg_number,
+              prev_chain:      prev_chain,
+              nonce:           nonce,
+              x3dh_header:     x3dh_header
             })
          |> Repo.insert() do
       {:ok, _} ->
@@ -159,7 +309,12 @@ defmodule Koda.Chat do
           author:          %{id: sender_id, username: sender_username},
           content:         content,
           encrypted:       encrypted,
-          inserted_at:     DateTime.to_iso8601(now)
+          inserted_at:     DateTime.to_iso8601(now),
+          ratchet_key:     ratchet_key,
+          msg_number:      msg_number,
+          prev_chain:      prev_chain,
+          nonce:           nonce,
+          x3dh_header:     x3dh_header
         }
         Phoenix.PubSub.broadcast(Koda.PubSub, "dm:#{conversation_id}", {:new_message, msg})
         {:ok, msg}
@@ -186,7 +341,12 @@ defmodule Koda.Chat do
         "sender_id"       => m.sender_id,
         "content"         => m.content,
         "encrypted"       => m.encrypted,
-        "inserted_at"     => DateTime.to_iso8601(m.inserted_at)
+        "inserted_at"     => DateTime.to_iso8601(m.inserted_at),
+        "ratchet_key"     => Map.get(m, :ratchet_key),
+        "msg_number"      => Map.get(m, :msg_number),
+        "prev_chain"      => Map.get(m, :prev_chain),
+        "nonce"           => Map.get(m, :nonce),
+        "x3dh_header"     => Map.get(m, :x3dh_header)
       }
     end))
   end
@@ -288,6 +448,33 @@ defmodule Koda.Chat do
     end
   end
 
+  # Pushes a lightweight "this channel has a new message" signal to
+  # every other server member's per-user socket topic, so the sidebar
+  # can bump an unread badge for a channel the member isn't currently
+  # viewing (and therefore isn't subscribed to "channel:<id>" for) --
+  # see RoomChannel.handle_info({:unread_bump, _}, _). Doesn't filter by
+  # per-channel role visibility: a member who can't see this channel
+  # just receives a bump for a channel_id their client never rendered
+  # in the first place, which is harmless (matches how @everyone below
+  # already broadcasts to the full member list rather than computing
+  # per-channel visibility).
+  defp broadcast_unread_bump(channel_id, sender_id) do
+    import Ecto.Query
+    case Repo.get(Koda.Servers.Channel, channel_id) do
+      nil -> :ok
+      channel ->
+        member_ids = Repo.all(
+          from m in Koda.Servers.Member,
+          where: m.server_id == ^channel.server_id and m.user_id != ^sender_id,
+          select: m.user_id
+        )
+        Enum.each(member_ids, fn user_id ->
+          Phoenix.PubSub.broadcast(Koda.PubSub, "user:#{user_id}",
+            {:unread_bump, %{channel_id: channel_id, server_id: channel.server_id}})
+        end)
+    end
+  end
+
   # ── Mention processing ────────────────────────────────────────────────────
 
   defp process_mentions(channel_id, sender_id, content, msg) do
@@ -306,8 +493,15 @@ defmodule Koda.Chat do
                     message_id: msg.id, sender: sender_name}
 
     cond do
-      # @everyone -- notify all server members except sender
-      String.contains?(content, "@everyone") ->
+      # @everyone -- notify all server members except sender. Gated on
+      # the mention_everyone permission (same flag member_can?/3 already
+      # checks elsewhere) -- without this, anyone could type the literal
+      # text "@everyone" and trigger a full-server notification blast
+      # regardless of their role. A sender who lacks the permission just
+      # falls through to individual/role @mention scanning below, same
+      # as if they'd typed any other plain text.
+      String.contains?(content, "@everyone") and
+          Koda.Servers.member_can?(server_id, sender_id, "mention_everyone") ->
         members = Koda.Repo.all(
           from m in Koda.Servers.Member,
           where: m.server_id == ^server_id and m.user_id != ^sender_id,

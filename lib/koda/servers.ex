@@ -485,23 +485,71 @@ defmodule Koda.Servers do
     end)
   end
 
-  def member_can_view_channel?(channel_id, user_id, server_id) do
-    import Ecto.Query
-    allowed_roles = get_channel_allowed_roles(channel_id)
-    if Enum.empty?(allowed_roles) do
-      true
-    else
-      member = get_member(server_id, user_id)
-      if is_nil(member) do
-        false
-      else
+  @doc """
+  Whether a member can see (and therefore read/post/join) a channel --
+  the "deliberately separate" layer member_can?/3 defers to. Combines
+  three gates, all of which must pass:
+
+    1. the server-wide "view_channels" role permission (member_can?/3)
+    2. the channel's own category's allowed-roles list, if it has one
+    3. the channel's own allowed-roles list
+
+  An empty allowed-roles list means "no restriction" at that level, same
+  as Discord treating no overwrites as inherited/default access. Server
+  owners always pass, same as every other permission check here.
+
+  A content-labeled channel is a hard, unconditional block for a child
+  account (see Koda.Parental) -- checked first, before the owner bypass,
+  since a child must never see labeled content even in a server they
+  happen to own. Standard accounts' hide/warn/show preference is a
+  personal, client-rendered choice (content_filters in their own
+  settings), not an access-control boundary, so it isn't checked here.
+  """
+  def member_can_view_channel?(%Channel{} = channel, user_id) do
+    not child_blocked?(channel, user_id) &&
+      (owner?(channel.server_id, user_id) ||
+         (member_can?(channel.server_id, user_id, "view_channels") &&
+            roles_allow?(channel.server_id, user_id, get_category_allowed_roles_or_empty(channel.category_id)) &&
+            roles_allow?(channel.server_id, user_id, get_channel_allowed_roles(channel.id))))
+  end
+
+  defp child_blocked?(%Channel{content_labels: []}, _user_id), do: false
+  defp child_blocked?(%Channel{}, user_id) do
+    match?(%{account_type: "child"}, Koda.Auth.get_user(user_id))
+  end
+
+  def member_can_view_channel?(channel_id, user_id) when is_binary(channel_id) do
+    case get_channel(channel_id) do
+      nil -> false
+      channel -> member_can_view_channel?(channel, user_id)
+    end
+  end
+
+  @doc """
+  Whether a member can post in a channel: everything view access requires,
+  plus -- for a read-only ("announcement") channel -- manage_messages or
+  ownership. Shared by the REST send endpoint and the socket's
+  new_message handler so the two can't drift apart on what's allowed.
+  """
+  def member_can_send_message?(%Channel{} = channel, user_id) do
+    member_can_view_channel?(channel, user_id) &&
+      (!channel.is_read_only ||
+         owner?(channel.server_id, user_id) ||
+         member_can?(channel.server_id, user_id, "manage_messages"))
+  end
+
+  defp get_category_allowed_roles_or_empty(nil), do: []
+  defp get_category_allowed_roles_or_empty(category_id), do: get_category_allowed_roles(category_id)
+
+  defp roles_allow?(_server_id, _user_id, []), do: true
+  defp roles_allow?(server_id, user_id, allowed_role_ids) do
+    case get_member(server_id, user_id) do
+      nil -> false
+      member ->
         member_role_ids =
-          from(mr in Koda.Servers.MemberRole,
-            where: mr.member_id == ^member.id,
-            select: mr.role_id
-          ) |> Repo.all()
-        Enum.any?(allowed_roles, &(&1 in member_role_ids))
-      end
+          from(mr in MemberRole, where: mr.member_id == ^member.id, select: mr.role_id)
+          |> Repo.all()
+        Enum.any?(allowed_role_ids, &(&1 in member_role_ids))
     end
   end
   # ── Category role permissions ─────────────────────────────────────────────

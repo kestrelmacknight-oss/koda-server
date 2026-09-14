@@ -30,9 +30,15 @@ defmodule Koda.Auth do
         {:error, :invalid_credentials}
 
       user.must_change_password ->
+        # A forced password change is allowed through regardless of
+        # schedule -- narrow, non-content-bearing, and a child must
+        # always be able to complete it.
         {:ok, token, _} = Guardian.encode_and_sign(user,
           %{"typ" => "restricted"}, ttl: {30, :minutes})
         {:ok, %{token: token, user: user, must_change_password: true}}
+
+      user.account_type == "child" and not Koda.Parental.allowed_now?(user) ->
+        {:error, :outside_schedule}
 
       true ->
         {:ok, token, _} = Guardian.encode_and_sign(user)

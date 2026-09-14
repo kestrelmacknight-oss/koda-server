@@ -1,6 +1,7 @@
 defmodule Koda.DirectMessages do
   import Ecto.Query
   alias Koda.Repo
+  alias Koda.Friends
 
   defmodule Conversation do
     use Ecto.Schema
@@ -29,9 +30,16 @@ defmodule Koda.DirectMessages do
           or (c.initiator_id == ^other_id and c.recipient_id == ^user_id)
     ) do
       nil ->
-        %Conversation{}
-        |> Conversation.changeset(%{initiator_id: user_id, recipient_id: other_id})
-        |> Repo.insert()
+        # Only gate *new* conversations on the recipient's friends-only-DMs
+        # setting -- existing conversations stay reachable even if that
+        # setting changes afterwards.
+        if Friends.can_dm?(user_id, other_id) do
+          %Conversation{}
+          |> Conversation.changeset(%{initiator_id: user_id, recipient_id: other_id})
+          |> Repo.insert()
+        else
+          {:error, :dm_blocked}
+        end
       existing ->
         {:ok, existing}
     end

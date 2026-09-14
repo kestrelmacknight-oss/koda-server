@@ -13,8 +13,8 @@ defmodule KodaWeb.StageController do
         conn |> put_status(404) |> json(%{error: "Channel not found"})
       channel.type != "stage" ->
         conn |> put_status(422) |> json(%{error: "Not a stage channel"})
-      is_nil(Servers.get_member(channel.server_id, user.id)) ->
-        conn |> put_status(403) |> json(%{error: "Not a member"})
+      not Servers.member_can_view_channel?(channel, user.id) ->
+        conn |> put_status(403) |> json(%{error: "Not authorized"})
       true ->
         is_admin = Servers.owner?(channel.server_id, user.id) or
                    Servers.member_can?(channel.server_id, user.id, "manage_server")
@@ -41,7 +41,7 @@ defmodule KodaWeb.StageController do
     user    = Guardian.Plug.current_resource(conn)
     channel = Servers.get_channel(channel_id)
 
-    if channel && Servers.get_member(channel.server_id, user.id) do
+    if channel && Servers.member_can_view_channel?(channel, user.id) do
       Phoenix.PubSub.broadcast(Koda.PubSub, "stage:#{channel_id}",
         {:hand_raised, %{user_id: user.id, username: user.username}})
       json(conn, %{ok: true})

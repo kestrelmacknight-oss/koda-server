@@ -31,6 +31,20 @@ defmodule Koda.DigitalProducts do
         |> validate_inclusion(:product_type, ["file", "license_key"])
         |> validate_inclusion(:scope, ["server", "creator"])
         |> validate_number(:price_cents, greater_than_or_equal_to: 0)
+        |> validate_file_url_for_file_type()
+    end
+
+    # A "file" product with no file_url would 302-redirect nowhere on
+    # download (see DigitalProductsController.download/2) -- reject it
+    # at creation/update instead of shipping a purchasable dead link.
+    # Only enforced when product_type is actually changing to/being set
+    # as "file" in this attrs, so an unrelated edit (e.g. price) to an
+    # existing license_key product doesn't spuriously require a file_url.
+    defp validate_file_url_for_file_type(changeset) do
+      case get_field(changeset, :product_type) do
+        "file" -> validate_required(changeset, [:file_url])
+        _ -> changeset
+      end
     end
   end
 

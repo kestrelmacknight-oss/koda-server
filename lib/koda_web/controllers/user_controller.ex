@@ -41,7 +41,7 @@ defmodule KodaWeb.UserController do
     users = Koda.Repo.all(
       from u in Koda.Auth.User,
       where: ilike(u.username, ^"%#{username}%"),
-      select: %{id: u.id, username: u.username, avatar_url: u.avatar_url},
+      select: %{id: u.id, username: u.username, avatar_url: u.avatar_url, koda_tier: u.koda_tier},
       limit: 10
     )
     json(conn, %{users: users})

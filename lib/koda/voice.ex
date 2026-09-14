@@ -2,15 +2,27 @@ defmodule Koda.Voice do
   alias Koda.Voice.LiveKit
   alias Koda.Servers
 
-  def join_token(channel_id, user) do
+  def join_token(channel_id, user, opts \\ []) do
     channel = Servers.get_channel(channel_id)
 
     cond do
       is_nil(channel)                            -> {:error, :channel_not_found}
-      is_nil(Servers.get_member(channel.server_id, user.id)) -> {:error, :unauthorized}
+      not Servers.member_can_view_channel?(channel, user.id) -> {:error, :unauthorized}
       not Koda.Servers.Channel.voice?(channel)  -> {:error, :not_a_voice_channel}
       true ->
-        token = LiveKit.generate_token(user, channel_id)
+        # A pop-out window opens a second LiveKit connection alongside the
+        # main call window. Without a distinct identity, LiveKit's default
+        # single-connection-per-identity rule would boot the main session
+        # the moment the pop-out connects, so viewers get a "-view" suffixed
+        # identity and cannot publish (no duplicate mic/cam).
+        token_opts =
+          if Keyword.get(opts, :viewer, false) do
+            [identity_suffix: "-view", can_publish: false]
+          else
+            []
+          end
+
+        token = LiveKit.generate_token(user, channel_id, token_opts)
         url   = Application.get_env(:koda, :livekit, [])
                 |> Keyword.get(:public_url, "ws://localhost:7880")
         {:ok, %{token: token, url: url, room: LiveKit.room_name(channel_id)}}
@@ -25,7 +37,9 @@ defmodule Koda.Voice do
     room       = get_in(event, ["room", "name"])
     identity   = get_in(event, ["participant", "identity"])
     channel_id = LiveKit.channel_id_from_room(room)
-    if channel_id && identity do
+    # "-view" identities are subscribe-only pop-out windows (see
+    # join_token/3), not real participants -- don't surface them.
+    if channel_id && identity && !String.ends_with?(identity, "-view") do
       meta = get_in(event, ["participant", "metadata"])
              |> case do
                nil -> %{}
@@ -41,7 +55,7 @@ defmodule Koda.Voice do
     room       = get_in(event, ["room", "name"])
     identity   = get_in(event, ["participant", "identity"])
     channel_id = LiveKit.channel_id_from_room(room)
-    if channel_id && identity do
+    if channel_id && identity && !String.ends_with?(identity, "-view") do
       Phoenix.PubSub.broadcast(Koda.PubSub, "voice:#{channel_id}",
         {:participant_left, identity})
     end

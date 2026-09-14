@@ -47,6 +47,9 @@ defmodule Koda.MixProject do
       {:cors_plug,           "~> 3.0"},
       # Background jobs
       {:oban,                "~> 2.18"},
+      # IANA timezone database, for DST-correct evaluation of a child
+      # account's weekly access schedule (see Koda.Parental).
+      {:tzdata,              "~> 1.1"},
       # ScyllaDB / Cassandra
       # UUID generation (TimeUUID for ScyllaDB)
       {:uuid,                "~> 1.1"},

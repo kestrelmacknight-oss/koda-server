@@ -79,7 +79,13 @@ if config_env() == :prod do
   config :koda, Oban,
     engine:  Oban.Engines.Basic,
     repo:    Koda.Repo,
-    queues:  [default: 10, email: 5, notifications: 20]
+    queues:  [default: 10, email: 5, notifications: 20],
+    plugins: [
+      {Oban.Plugins.Cron,
+       crontab: [
+         {"* * * * *", Koda.Parental.ScheduleSweeper}
+       ]}
+    ]
 
   config :logger, :console,
     format:   "$time $metadata[$level] $message\n",
@@ -94,3 +100,22 @@ config :koda,
   stripe_secret_key: System.get_env("STRIPE_SECRET_KEY"),
   stripe_webhook_secret: System.get_env("STRIPE_WEBHOOK_SECRET"),
   stripe_publishable_key: System.get_env("STRIPE_PUBLISHABLE_KEY")
+
+# Throne's Ed25519 webhook-signing key is public by design (it verifies
+# Throne's signature, it doesn't authenticate us to Throne), so it's safe
+# to ship as the default here -- THRONE_PUBLIC_KEY_PEM only exists so it
+# can be rotated without a deploy if Throne ever reissues it.
+config :koda, :throne,
+  public_key_pem: System.get_env("THRONE_PUBLIC_KEY_PEM")
+
+config :koda, :giphy,
+  api_key: System.get_env("GIPHY_API_KEY")
+
+# Printful merch fulfillment -- per-server OAuth connection (see
+# Koda.Printful), mirroring how Stripe Connect works per-creator. Unlike
+# Stripe Connect, Printful's OAuth hands us a real bearer access token
+# for the connected store that we must hold ourselves, so client_secret
+# here is exactly as sensitive as the Stripe keys above.
+config :koda, :printful,
+  client_id: System.get_env("PRINTFUL_CLIENT_ID"),
+  client_secret: System.get_env("PRINTFUL_CLIENT_SECRET")

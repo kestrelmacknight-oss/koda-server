@@ -11,12 +11,33 @@ defmodule KodaWeb.RoomChannel do
       is_nil(channel) ->
         {:error, %{reason: "channel_not_found"}}
 
-      is_nil(Servers.get_member(channel.server_id, user.id)) ->
-        {:error, %{reason: "not_a_member"}}
+      not Servers.member_can_view_channel?(channel, user.id) ->
+        {:error, %{reason: "not_authorized"}}
 
       true ->
         send(self(), {:after_join, channel_id})
         {:ok, assign(socket, :channel_id, channel_id)}
+    end
+  end
+
+  # Presence-only topic for "who's in this voice channel" -- separate from
+  # the LiveKit media connection, this just relays the participant_joined/
+  # participant_left events LiveKit's webhook already broadcasts (see
+  # Koda.Voice.handle_webhook) to anyone watching the channel list.
+  def join("voice:" <> channel_id, _payload, socket) do
+    user    = socket.assigns[:current_user]
+    channel = Servers.get_channel(channel_id)
+
+    cond do
+      is_nil(channel) ->
+        {:error, %{reason: "channel_not_found"}}
+
+      not Servers.member_can_view_channel?(channel, user.id) ->
+        {:error, %{reason: "not_authorized"}}
+
+      true ->
+        send(self(), {:after_join_voice, channel_id})
+        {:ok, socket}
     end
   end
 
@@ -50,14 +71,51 @@ defmodule KodaWeb.RoomChannel do
     {:noreply, socket}
   end
 
+  def handle_info({:after_join_voice, channel_id}, socket) do
+    participants =
+      case Koda.Voice.list_participants(channel_id) do
+        {:ok, ps} ->
+          ps
+          # "-view" identities are subscribe-only pop-out windows (see
+          # Koda.Voice.join_token), not real participants.
+          |> Enum.reject(fn p -> String.ends_with?(p["identity"] || "", "-view") end)
+          |> Enum.map(&normalize_participant/1)
+        _ -> []
+      end
+    push(socket, "voice_state", %{participants: participants})
+    {:noreply, socket}
+  end
+
+  # Raw LiveKit participants vs. the webhook's already-flat
+  # %{user_id:, username:} -- normalized to the same shape here so the
+  # client only ever handles one participant format.
+  defp normalize_participant(p) do
+    meta =
+      case p["metadata"] do
+        s when is_binary(s) and s != "" ->
+          case Jason.decode(s) do
+            {:ok, m} -> m
+            _ -> %{}
+          end
+        _ -> %{}
+      end
+
+    %{user_id: p["identity"], username: meta["username"]}
+  end
+
   @impl true
   def handle_in("new_message", %{"content" => content}, socket) do
     user       = socket.assigns[:current_user]
     channel_id = socket.assigns[:channel_id]
+    channel    = Servers.get_channel(channel_id)
 
-    case Chat.send_message(channel_id, user.id, content) do
-      {:ok, msg}  -> {:reply, {:ok, msg}, socket}
-      {:error, _} -> {:reply, {:error, %{reason: "send_failed"}}, socket}
+    if channel && Servers.member_can_send_message?(channel, user.id) do
+      case Chat.send_message(channel_id, user.id, content) do
+        {:ok, msg}  -> {:reply, {:ok, msg}, socket}
+        {:error, _} -> {:reply, {:error, %{reason: "send_failed"}}, socket}
+      end
+    else
+      {:reply, {:error, %{reason: "not_authorized"}}, socket}
     end
   end
 
@@ -82,6 +140,67 @@ defmodule KodaWeb.RoomChannel do
 
   def handle_info({:typing, payload}, socket) do
     push(socket, "typing", payload)
+    {:noreply, socket}
+  end
+
+  def handle_info({:message_deleted, message_id}, socket) do
+    push(socket, "message_deleted", %{id: message_id})
+    {:noreply, socket}
+  end
+
+  def handle_info({:message_edited, payload}, socket) do
+    push(socket, "message_edited", payload)
+    {:noreply, socket}
+  end
+
+  def handle_info({:message_pinned, payload}, socket) do
+    push(socket, "message_pinned", payload)
+    {:noreply, socket}
+  end
+
+  def handle_info({:message_unpinned, payload}, socket) do
+    push(socket, "message_unpinned", payload)
+    {:noreply, socket}
+  end
+
+  def handle_info({:link_preview_updated, payload}, socket) do
+    push(socket, "link_preview_updated", payload)
+    {:noreply, socket}
+  end
+
+  def handle_info({:conversation_read, payload}, socket) do
+    push(socket, "conversation_read", payload)
+    {:noreply, socket}
+  end
+
+  def handle_info({:participant_joined, payload}, socket) do
+    push(socket, "voice_participant_joined", payload)
+    {:noreply, socket}
+  end
+
+  def handle_info({:participant_left, identity}, socket) do
+    push(socket, "voice_participant_left", %{user_id: identity})
+    {:noreply, socket}
+  end
+
+  # Mention notifications (see Koda.Chat.push_notification/2) -- pushed
+  # on the per-user "user:<id>" topic, which every connected client
+  # already joins on login (see home_screen.dart's
+  # _subscribeToUserNotifications). This clause was missing entirely
+  # until now, so every {:notification, _} broadcast was silently
+  # dropped by the catch-all below -- mentions were detected and stored
+  # server-side but never actually delivered live.
+  def handle_info({:notification, notif}, socket) do
+    push(socket, "notification", notif)
+    {:noreply, socket}
+  end
+
+  # Lightweight "a channel you can see got a new message" signal, also
+  # on the per-user topic -- lets the client bump a channel's unread
+  # badge in the sidebar without having to join every channel's own
+  # topic just to watch for activity (see Koda.Chat.send_message/4).
+  def handle_info({:unread_bump, payload}, socket) do
+    push(socket, "unread_bump", payload)
     {:noreply, socket}
   end
 

@@ -12,12 +12,13 @@ defmodule Koda.Voice.LiveKit do
     api_secret = cfg[:api_secret]
     now        = System.system_time(:second)
     can_publish = Keyword.get(opts, :can_publish, true)
+    identity    = user.id <> Keyword.get(opts, :identity_suffix, "")
 
     claims = %{
       "exp"  => now + Keyword.get(opts, :ttl, @default_ttl),
       "nbf"  => now,
       "iss"  => api_key,
-      "sub"  => user.id,
+      "sub"  => identity,
       "video"=> %{
         "room"           => room_name(channel_id),
         "roomJoin"       => true,

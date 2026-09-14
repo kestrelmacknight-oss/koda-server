@@ -367,6 +367,11 @@ defmodule Koda.Marketplace do
           credit_server_bank(server_id, fee_cents, "subscription", sub.id)
         end
 
+        # Pulse perk: one redeemable server boost token per renewal.
+        if tier == "pulse" do
+          Koda.Boosts.mint_boost_token(user_id)
+        end
+
         {:ok, sub}
       {:error, err} -> {:error, err}
     end

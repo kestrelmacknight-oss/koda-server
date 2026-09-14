@@ -7,6 +7,7 @@ defmodule KodaWeb.Router do
 
   pipeline :auth do
     plug Koda.Auth.Pipeline
+    plug Koda.Auth.ScheduleGate
   end
 
   # -- Public routes ----------------------------------------------------------
@@ -29,6 +30,14 @@ defmodule KodaWeb.Router do
 
     # LiveKit webhook (signed by LiveKit, not user JWT)
     post "/livekit/webhook",       LiveKitWebhookController, :webhook
+
+    # Throne webhook (signed with Throne's Ed25519 key, routed by per-creator token)
+    post "/webhooks/throne/:token", ThroneController, :webhook
+
+    # Printful OAuth callback -- Printful redirects the browser here
+    # directly, with no Koda auth attached. Protected by the signed
+    # `state` param instead (see Koda.Printful.authorize_url/2).
+    get "/printful/oauth/callback", PrintfulController, :callback
   end
 
   # -- Protected routes -------------------------------------------------------
@@ -42,16 +51,12 @@ defmodule KodaWeb.Router do
     post   "/auth/totp/setup",              AuthController, :totp_setup
 
     # Key bundles (E2EE / KCP)
-    put    "/keys/bundle",              KeyBundleController, :put
+    put    "/keys/bundle",              KeyBundleController, :upsert
     get    "/keys/bundle/status",       KeyBundleController, :status
-    get    "/keys/bundle/:user_id",     KeyBundleController, :get
+    get    "/keys/bundle/:user_id",     KeyBundleController, :show
 
-    # TEMPORARY -- remove once Scylla connection issue is resolved
     post   "/auth/totp/verify",             AuthController, :totp_verify
-    get    "/auth/keys",                    AuthController, :get_keys
-    put    "/auth/keys",                    AuthController, :upload_keys
     get    "/users/search",                 UserController, :search
-    get    "/users/:id/keys",               AuthController, :get_user_keys
 
     post "/import/discord/preview", ImportController, :preview
     post "/servers/:server_id/import/discord", ImportController, :apply
@@ -151,6 +156,19 @@ defmodule KodaWeb.Router do
     get    "/channels/:channel_id/messages",ChannelController, :messages
     post   "/channels/:channel_id/messages",ChannelController, :send_message
     post   "/channels/:channel_id/typing",  ChannelController, :typing
+    patch  "/channels/:channel_id/messages/:message_id",      ChannelController, :edit_message
+    patch  "/channels/:channel_id/messages/:message_id/link_preview", ChannelController, :set_link_preview
+    post   "/channels/:channel_id/messages/:message_id/pin",  ChannelController, :pin_message
+    delete "/channels/:channel_id/messages/:message_id/pin",  ChannelController, :unpin_message
+    get    "/channels/:channel_id/pins",                      ChannelController, :pins
+    post   "/channels/:channel_id/read",                      ChannelController, :mark_read
+
+    # GIF picker (Giphy proxy -- key stays server-side)
+    get    "/gifs/search",                  GiphyController, :search
+    get    "/gifs/trending",                GiphyController, :trending
+
+    # Unread badges (channels + DMs, one bulk fetch)
+    get    "/unread_counts",                UnreadController, :index
 
     # Voice
     get    "/channels/:channel_id/voice/token",        VoiceController, :token
@@ -187,6 +205,10 @@ defmodule KodaWeb.Router do
     post   "/friends/:user_id/block",           FriendsController, :block
     delete "/friends/:user_id/block",           FriendsController, :unblock
     patch  "/friends/privacy",                  FriendsController, :update_privacy
+    # Throne creator integration
+    get    "/throne/webhook_url",           ThroneController, :webhook_url
+    post   "/throne/webhook_url/regenerate",ThroneController, :regenerate_webhook_url
+
     # Invites
     get    "/servers/:server_id/invites",   InviteController, :index
     post   "/servers/:server_id/invites",   InviteController, :create
@@ -198,6 +220,8 @@ defmodule KodaWeb.Router do
     post   "/dms/conversations",            DmController, :open_conversation
     get    "/dms/:conversation_id/messages",DmController, :messages
     post   "/dms/:conversation_id/messages",DmController, :send_message
+    post   "/dms/:conversation_id/read",    DmController, :mark_read
+    get    "/dms/:conversation_id/read_state",DmController, :read_state
 
     # Reordering
     post   "/servers/:server_id/channels/reorder",    ChannelController, :reorder
@@ -233,6 +257,29 @@ defmodule KodaWeb.Router do
     get    "/marketplace/subscription",           MarketplaceController, :subscription_info
     post   "/marketplace/subscription",           MarketplaceController, :create_subscription
     get    "/servers/:server_id/bank",            MarketplaceController, :server_bank
+
+    # Parental controls
+    post   "/parental/children",                             ParentalController, :create_child
+    get    "/parental/children",                              ParentalController, :list_children
+    get    "/parental/children/:child_id/friends",             ParentalController, :child_friends
+    delete "/parental/children/:child_id/friends/:friend_id",  ParentalController, :remove_child_friend
+    get    "/parental/children/:child_id/servers",              ParentalController, :child_servers
+    delete "/parental/children/:child_id/servers/:server_id",   ParentalController, :remove_child_from_server
+    get    "/parental/children/:child_id/schedule",             ParentalController, :get_schedule
+    put    "/parental/children/:child_id/schedule",             ParentalController, :put_schedule
+    delete "/parental/children/:child_id/schedule",             ParentalController, :delete_schedule
+    post   "/parental/children/:child_id/override",             ParentalController, :create_override
+    delete "/parental/children/:child_id/override",             ParentalController, :delete_override
+
+    # Server boosting (Pulse subscriber perk)
+    get    "/boost_tokens",                       BoostController, :my_tokens
+    post   "/servers/:server_id/boost",            BoostController, :boost
+    get    "/servers/:server_id/boost_status",     BoostController, :status
+
+    # Printful merch fulfillment (per-server OAuth connection)
+    post   "/servers/:server_id/printful/connect", PrintfulController, :connect
+    get    "/servers/:server_id/printful/status",  PrintfulController, :status
+    delete "/servers/:server_id/printful",         PrintfulController, :disconnect
 
     # Stripe webhooks (public — no auth)
     # Events / Calendar
