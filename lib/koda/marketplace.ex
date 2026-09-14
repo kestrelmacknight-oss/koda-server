@@ -395,6 +395,7 @@ defmodule Koda.Marketplace do
       "subscription"         -> confirm_subscription(pi_id)
       "server_subscription"  -> Koda.ServerSubscriptions.confirm_subscription(pi_id)
       "digital_product"      -> Koda.DigitalProducts.confirm_purchase(pi_id)
+      "stage_ticket"         -> Koda.Events.confirm_ticket(pi_id)
       _                      -> :ok
     end
   end

@@ -19,19 +19,34 @@ defmodule KodaWeb.StageController do
         is_admin = Servers.owner?(channel.server_id, user.id) or
                    Servers.member_can?(channel.server_id, user.id, "manage_server")
 
-        # Admins and owners join as speakers; everyone else joins as listeners.
-        token = Voice.LiveKit.generate_token(user, channel_id,
-                  can_publish: is_admin)
+        # A calendar event can be linked to this stage channel and
+        # priced -- see Koda.Events.current_ticketed_event/1, which is
+        # series/recurrence-aware (a recurring ticketed show gates every
+        # occurrence, not just its first). Admins/owners always get in
+        # to run their own event.
+        ticketed_event = if is_admin, do: nil, else: Koda.Events.current_ticketed_event(channel_id)
+        has_ticket = ticketed_event && Koda.Events.has_ticket?(ticketed_event.id, user.id)
 
-        url = Application.get_env(:koda, :livekit, [])
-              |> Keyword.get(:public_url, "wss://voice.koda.fyi")
+        if ticketed_event && not has_ticket do
+          conn |> put_status(402) |> json(%{
+            error: "ticket_required",
+            event: Koda.Events.event_json(ticketed_event)
+          })
+        else
+          # Admins and owners join as speakers; everyone else joins as listeners.
+          token = Voice.LiveKit.generate_token(user, channel_id,
+                    can_publish: is_admin)
 
-        json(conn, %{
-          token:     token,
-          url:       url,
-          room:      Voice.LiveKit.room_name(channel_id),
-          is_speaker: is_admin
-        })
+          url = Application.get_env(:koda, :livekit, [])
+                |> Keyword.get(:public_url, "wss://voice.koda.fyi")
+
+          json(conn, %{
+            token:     token,
+            url:       url,
+            room:      Voice.LiveKit.room_name(channel_id),
+            is_speaker: is_admin
+          })
+        end
     end
   end
 

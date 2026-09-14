@@ -289,6 +289,7 @@ defmodule KodaWeb.Router do
     delete "/events/:id",                    EventsController, :delete
     post   "/events/:event_id/subscribe",    EventsController, :subscribe
     delete "/events/:event_id/subscribe",    EventsController, :unsubscribe
+    post   "/events/:event_id/tickets",      EventsController, :purchase_ticket
 
     # Reactions
     post   "/messages/:message_id/reactions",         ReactionController, :add
