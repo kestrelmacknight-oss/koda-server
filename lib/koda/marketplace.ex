@@ -296,6 +296,97 @@ defmodule Koda.Marketplace do
     end
   end
 
+  # ── Revenue reporting ────────────────────────────────────────────────────
+  #
+  # Every credit_server_bank/4 call already writes a PointTransaction row
+  # (source_type + amount), so the revenue dashboard is read-only queries
+  # over that existing ledger rather than a new tracking mechanism.
+
+  defp transactions_query(server_id, opts) do
+    query = from t in PointTransaction, where: t.server_id == ^server_id
+    query = case Keyword.get(opts, :from) do
+      nil -> query
+      dt  -> from t in query, where: t.inserted_at >= ^dt
+    end
+    query = case Keyword.get(opts, :to) do
+      nil -> query
+      dt  -> from t in query, where: t.inserted_at <= ^dt
+    end
+    # :before is a strict "<" pagination cursor (the caller already has
+    # the row at exactly this timestamp and wants older ones), distinct
+    # from the inclusive :to bound used to close off a reporting window.
+    case Keyword.get(opts, :before) do
+      nil -> query
+      dt  -> from t in query, where: t.inserted_at < ^dt
+    end
+  end
+
+  @doc "Current balance, lifetime total, and an all-time breakdown by source_type."
+  def revenue_summary(server_id) do
+    bank = get_or_create_server_bank(server_id)
+    %{
+      balance:           bank.balance,
+      lifetime_received: bank.lifetime_received,
+      breakdown:         revenue_breakdown(server_id)
+    }
+  end
+
+  @doc "Points earned per source_type within `opts[:from..:to]` (default: all-time)."
+  def revenue_breakdown(server_id, opts \\ []) do
+    server_id
+    |> transactions_query(opts)
+    |> group_by([t], t.source_type)
+    |> select([t], %{source_type: t.source_type, total: sum(t.amount), count: count(t.id)})
+    |> Repo.all()
+    |> Enum.sort_by(& &1.total, :desc)
+  end
+
+  @doc """
+  Points earned per calendar day over the last `days` days (default 30,
+  ending today), zero-filled so a chart doesn't have to guess at gaps
+  where nothing happened.
+  """
+  def revenue_timeseries(server_id, days \\ 30) do
+    to   = DateTime.utc_now()
+    from = DateTime.add(to, -(max(days, 1) - 1) * 86400, :second)
+
+    rows =
+      server_id
+      |> transactions_query(from: from, to: to)
+      |> group_by([t], fragment("date(?)", t.inserted_at))
+      |> select([t], %{day: fragment("date(?)", t.inserted_at), total: sum(t.amount)})
+      |> Repo.all()
+
+    by_day = Map.new(rows, fn r -> {Date.to_iso8601(r.day), r.total} end)
+
+    Date.range(DateTime.to_date(from), DateTime.to_date(to))
+    |> Enum.map(fn d ->
+      key = Date.to_iso8601(d)
+      %{date: key, total: Map.get(by_day, key, 0)}
+    end)
+  end
+
+  @doc "Most recent transactions for a server, newest first, cursor-paginated on inserted_at via opts[:before]."
+  def list_transactions(server_id, opts \\ []) do
+    limit = opts |> Keyword.get(:limit, 50) |> max(1) |> min(200)
+
+    server_id
+    |> transactions_query(opts)
+    |> order_by([t], desc: t.inserted_at)
+    |> limit(^limit)
+    |> Repo.all()
+  end
+
+  def transaction_json(t) do
+    %{
+      id:          t.id,
+      amount:      t.amount,
+      source_type: t.source_type,
+      source_id:   t.source_id,
+      inserted_at: DateTime.to_iso8601(t.inserted_at)
+    }
+  end
+
   # ── Subscriptions ────────────────────────────────────────────────────────
 
   def subscription_price(tier) do

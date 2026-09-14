@@ -257,6 +257,9 @@ defmodule KodaWeb.Router do
     get    "/marketplace/subscription",           MarketplaceController, :subscription_info
     post   "/marketplace/subscription",           MarketplaceController, :create_subscription
     get    "/servers/:server_id/bank",            MarketplaceController, :server_bank
+    get    "/servers/:server_id/revenue/summary",      MarketplaceController, :revenue_summary
+    get    "/servers/:server_id/revenue/timeseries",   MarketplaceController, :revenue_timeseries
+    get    "/servers/:server_id/revenue/transactions", MarketplaceController, :revenue_transactions
 
     # Parental controls
     post   "/parental/children",                             ParentalController, :create_child

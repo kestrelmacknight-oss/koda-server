@@ -2,6 +2,11 @@ defmodule KodaWeb.MarketplaceController do
   use KodaWeb, :controller
   alias Koda.Marketplace
 
+  defp can_manage_marketplace?(server_id, user_id) do
+    Koda.Servers.owner?(server_id, user_id) or
+      Koda.Servers.member_can?(server_id, user_id, "manage_marketplace")
+  end
+
   # ── Stripe Connect onboarding ─────────────────────────────────────────────
 
   def connect_account(conn, _params) do
@@ -120,6 +125,62 @@ defmodule KodaWeb.MarketplaceController do
     balance = Marketplace.get_server_bank_balance(server_id)
     json(conn, %{server_id: server_id, balance: balance,
                  balance_usd: balance / 100.0})
+  end
+
+  # ── Revenue dashboard ────────────────────────────────────────────────────
+  #
+  # Financial detail beyond the plain balance every member already sees on
+  # the Server Bank tab -- gated to whoever can manage the marketplace,
+  # same authority as pricing tickets/products or connecting Printful.
+
+  def revenue_summary(conn, %{"server_id" => server_id}) do
+    user = Guardian.Plug.current_resource(conn)
+    if can_manage_marketplace?(server_id, user.id) do
+      json(conn, Marketplace.revenue_summary(server_id))
+    else
+      conn |> put_status(403) |> json(%{error: "Not authorized to view this server's revenue"})
+    end
+  end
+
+  def revenue_timeseries(conn, %{"server_id" => server_id} = params) do
+    user = Guardian.Plug.current_resource(conn)
+    if can_manage_marketplace?(server_id, user.id) do
+      days = parse_bounded_int(params["days"], 30, 1, 365)
+      json(conn, %{days: days, points: Marketplace.revenue_timeseries(server_id, days)})
+    else
+      conn |> put_status(403) |> json(%{error: "Not authorized to view this server's revenue"})
+    end
+  end
+
+  def revenue_transactions(conn, %{"server_id" => server_id} = params) do
+    user = Guardian.Plug.current_resource(conn)
+    if can_manage_marketplace?(server_id, user.id) do
+      opts = [limit: parse_bounded_int(params["limit"], 50, 1, 200)]
+      opts = case parse_dt(params["before"]) do
+        nil -> opts
+        dt  -> Keyword.put(opts, :before, dt)
+      end
+      transactions = Marketplace.list_transactions(server_id, opts)
+      json(conn, %{transactions: Enum.map(transactions, &Marketplace.transaction_json/1)})
+    else
+      conn |> put_status(403) |> json(%{error: "Not authorized to view this server's revenue"})
+    end
+  end
+
+  defp parse_bounded_int(nil, default, _min, _max), do: default
+  defp parse_bounded_int(str, default, min, max) do
+    case Integer.parse(str) do
+      {n, _} -> n |> max(min) |> min(max)
+      :error -> default
+    end
+  end
+
+  defp parse_dt(nil), do: nil
+  defp parse_dt(str) do
+    case DateTime.from_iso8601(str) do
+      {:ok, dt, _} -> dt
+      _ -> nil
+    end
   end
 
   # ── Stripe health check ──────────────────────────────────────────────────────

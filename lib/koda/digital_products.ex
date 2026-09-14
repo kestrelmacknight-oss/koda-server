@@ -1,6 +1,7 @@
 defmodule Koda.DigitalProducts do
   import Ecto.Query
   alias Koda.Repo
+  alias Koda.Marketplace
 
   defmodule Product do
     use Ecto.Schema
@@ -287,6 +288,17 @@ defmodule Koda.DigitalProducts do
         if product do
           Repo.update_all(from(p in Product, where: p.id == ^product.id),
             inc: [purchase_count: 1])
+        end
+
+        # Credit server bank -- this was the one paid marketplace flow
+        # that never fed the server's points economy (tips/subscriptions/
+        # tickets all do via Marketplace.credit_server_bank/4), which left
+        # digital goods invisible to any revenue reporting. Same 5% cut
+        # used everywhere else; scope: "creator" products have no
+        # server_id and nothing to credit.
+        if product && product.server_id && updated.amount_cents > 0 do
+          fee_cents = round(updated.amount_cents * 0.05)
+          Marketplace.credit_server_bank(product.server_id, fee_cents, "digital_product", updated.id)
         end
 
         # Notify buyer via PubSub
