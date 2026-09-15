@@ -258,6 +258,49 @@ defmodule Koda.ServerSubscriptions do
     end
   end
 
+  @doc """
+  Marks every subscription whose expires_at has passed as "expired" and
+  removes the role its tier granted (if any) -- see
+  Koda.ServerSubscriptions.SubscriptionSweeper, which calls this on an
+  hourly cron. This is a one-time 30-day grant, not an auto-renewing
+  Stripe Subscription (nothing in this app uses those), so "expired"
+  really does mean the perk goes away until the member re-subscribes --
+  not a billing failure to retry.
+  """
+  def expire_due_subscriptions do
+    now = DateTime.utc_now()
+
+    Repo.all(from s in Subscription, where: s.status == "active" and s.expires_at <= ^now)
+    |> Enum.each(&expire_subscription/1)
+  end
+
+  defp expire_subscription(sub) do
+    {:ok, _} = sub |> Subscription.changeset(%{status: "expired"}) |> Repo.update()
+
+    tier = get_tier(sub.tier_id)
+    if tier && tier.role_id do
+      remove_subscriber_role(sub.server_id, sub.user_id, tier.role_id)
+    end
+
+    Koda.Notifications.notify_and_push(sub.user_id, "subscription_expired",
+      "Subscription expired",
+      "Your #{if tier, do: tier.name, else: "server"} subscription has ended. Resubscribe to keep your perks.",
+      %{server_id: sub.server_id, tier_id: sub.tier_id})
+  end
+
+  defp remove_subscriber_role(server_id, user_id, role_id) do
+    case Koda.Repo.get_by(Koda.Servers.Member,
+        server_id: server_id, user_id: user_id) do
+      nil -> :ok
+      member ->
+        Koda.Repo.delete_all(
+          from mr in Koda.Servers.MemberRole,
+          where: mr.member_id == ^member.id and mr.role_id == ^role_id
+        )
+        :ok
+    end
+  end
+
   def subscriber_count(tier_id) do
     Repo.aggregate(from(s in Subscription,
       where: s.tier_id == ^tier_id and s.status == "active"

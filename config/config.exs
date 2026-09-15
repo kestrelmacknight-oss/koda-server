@@ -60,7 +60,11 @@ config :koda, Oban,
      crontab: [
        # Force-disconnects a child account's live socket the moment
        # their allowed window closes -- see Koda.Parental.ScheduleSweeper.
-       {"* * * * *", Koda.Parental.ScheduleSweeper}
+       {"* * * * *", Koda.Parental.ScheduleSweeper},
+       # Expires due server subscriptions and removes the role they
+       # granted -- see Koda.ServerSubscriptions.SubscriptionSweeper.
+       # Hourly is plenty precise for a 30-day subscription window.
+       {"0 * * * *", Koda.ServerSubscriptions.SubscriptionSweeper}
      ]}
   ]
 

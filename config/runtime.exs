@@ -85,7 +85,8 @@ if config_env() == :prod do
     plugins: [
       {Oban.Plugins.Cron,
        crontab: [
-         {"* * * * *", Koda.Parental.ScheduleSweeper}
+         {"* * * * *", Koda.Parental.ScheduleSweeper},
+         {"0 * * * *", Koda.ServerSubscriptions.SubscriptionSweeper}
        ]}
     ]
 
