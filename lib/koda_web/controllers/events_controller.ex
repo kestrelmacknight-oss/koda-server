@@ -124,6 +124,10 @@ defmodule KodaWeb.EventsController do
         conn |> put_status(404) |> json(%{error: "Event not found"})
       {:error, :already_has_ticket} ->
         conn |> put_status(422) |> json(%{error: "You already have a ticket"})
+      {:error, :owner_not_connected} ->
+        conn |> put_status(422) |> json(%{error: "This server's owner hasn't connected Stripe yet"})
+      {:error, :owner_not_onboarded} ->
+        conn |> put_status(422) |> json(%{error: "This server's owner hasn't finished Stripe onboarding"})
       {:error, err} ->
         conn |> put_status(422) |> json(%{error: inspect(err)})
     end

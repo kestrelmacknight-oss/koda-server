@@ -110,42 +110,85 @@ defmodule Koda.ServerSubscriptions do
       limit: 1)
   end
 
+  @doc """
+  Whether this server's owner can actually be paid -- Connect account
+  exists and onboarding is complete. Checked before letting a member pay
+  into a tier, not just at tier-creation time, since Connect status can
+  change (or never have been set up) after tiers already exist.
+  """
+  def owner_payable?(server_id) do
+    case Koda.Servers.get_server(server_id) do
+      nil -> false
+      server ->
+        case Marketplace.get_connect_account(server.owner_id) do
+          nil -> false
+          acct -> acct.charges_enabled
+        end
+    end
+  end
+
   def create_subscription_intent(tier_id, user_id) do
     case get_tier(tier_id) do
       nil -> {:error, :tier_not_found}
       tier ->
-        stripe_key = Application.get_env(:koda, :stripe_secret_key)
-        fee_cents = round(tier.price_cents * @platform_fee_percent)
-        case Stripe.Checkout.Session.create(%{
-          mode: :payment,
-          line_items: [%{
-            price_data: %{
-              currency: "usd",
-              product_data: %{name: "#{tier.name} subscription"},
-              unit_amount: tier.price_cents
-            },
-            quantity: 1
-          }],
-          payment_intent_data: %{
-            metadata: %{
-              type:      "server_subscription",
-              tier_id:   tier.id,
-              server_id: tier.server_id,
-              user_id:   user_id,
-              fee_cents: fee_cents
-            }
-          },
-          success_url: Marketplace.checkout_success_url(),
-          cancel_url:  Marketplace.checkout_cancel_url()
-        }, api_key: stripe_key) do
-          {:ok, session} ->
-            {:ok, %{
-              checkout_url: session.url,
-              amount_cents: tier.price_cents,
-              fee_cents:    fee_cents,
-              tier:         tier_json(tier)
-            }}
-          {:error, err} -> {:error, err}
+        server = Koda.Servers.get_server(tier.server_id)
+        connect_acct = server && Marketplace.get_connect_account(server.owner_id)
+
+        cond do
+          is_nil(server) ->
+            {:error, :tier_not_found}
+
+          is_nil(connect_acct) ->
+            {:error, :owner_not_connected}
+
+          not connect_acct.charges_enabled ->
+            {:error, :owner_not_onboarded}
+
+          true ->
+            stripe_key = Application.get_env(:koda, :stripe_secret_key)
+            fee_cents = round(tier.price_cents * @platform_fee_percent)
+            # 95% to the server owner via Stripe Connect, 5% stays in
+            # Koda's own balance as the real platform fee -- the server
+            # bank's points credit (confirm_subscription/1, unchanged)
+            # is a separate, purely symbolic loyalty number layered on
+            # top of that same 5%, not money moved a second time.
+            owner_amount_cents = tier.price_cents - fee_cents
+
+            case Stripe.Checkout.Session.create(%{
+              mode: :payment,
+              line_items: [%{
+                price_data: %{
+                  currency: "usd",
+                  product_data: %{name: "#{tier.name} subscription"},
+                  unit_amount: tier.price_cents
+                },
+                quantity: 1
+              }],
+              payment_intent_data: %{
+                transfer_data: %{
+                  destination: connect_acct.stripe_account_id,
+                  amount:       owner_amount_cents
+                },
+                metadata: %{
+                  type:      "server_subscription",
+                  tier_id:   tier.id,
+                  server_id: tier.server_id,
+                  user_id:   user_id,
+                  fee_cents: fee_cents
+                }
+              },
+              success_url: Marketplace.checkout_success_url(),
+              cancel_url:  Marketplace.checkout_cancel_url()
+            }, api_key: stripe_key) do
+              {:ok, session} ->
+                {:ok, %{
+                  checkout_url: session.url,
+                  amount_cents: tier.price_cents,
+                  fee_cents:    fee_cents,
+                  tier:         tier_json(tier)
+                }}
+              {:error, err} -> {:error, err}
+            end
         end
     end
   end

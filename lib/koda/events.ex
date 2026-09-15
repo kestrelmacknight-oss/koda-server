@@ -340,38 +340,59 @@ defmodule Koda.Events do
             complete_free_ticket(event, buyer_id)
 
           true ->
-            stripe_key = Application.get_env(:koda, :stripe_secret_key)
-            fee_cents = round(event.price_cents * 0.05)
+            server = Koda.Servers.get_server(event.server_id)
+            connect_acct = server && Koda.Marketplace.get_connect_account(server.owner_id)
 
-            case Stripe.Checkout.Session.create(%{
-              mode: :payment,
-              line_items: [%{
-                price_data: %{
-                  currency: "usd",
-                  product_data: %{name: "Ticket: #{event.title}"},
-                  unit_amount: event.price_cents
-                },
-                quantity: 1
-              }],
-              payment_intent_data: %{
-                metadata: %{type: "stage_ticket", event_id: event_id, buyer_id: buyer_id}
-              },
-              success_url: Koda.Marketplace.checkout_success_url(),
-              cancel_url:  Koda.Marketplace.checkout_cancel_url()
-            }, api_key: stripe_key) do
-              {:ok, session} ->
-                {:ok, ticket} = %EventTicket{}
-                |> EventTicket.changeset(%{
-                  event_id:                 event_id,
-                  buyer_id:                 buyer_id,
-                  amount_cents:             event.price_cents,
-                  fee_cents:                fee_cents,
-                  stripe_payment_intent_id: session.payment_intent,
-                  status:                   "pending"
-                })
-                |> Repo.insert()
-                {:ok, %{ticket: ticket, checkout_url: session.url, free: false}}
-              {:error, err} -> {:error, err}
+            cond do
+              is_nil(connect_acct) ->
+                {:error, :owner_not_connected}
+
+              not connect_acct.charges_enabled ->
+                {:error, :owner_not_onboarded}
+
+              true ->
+                stripe_key = Application.get_env(:koda, :stripe_secret_key)
+                fee_cents = round(event.price_cents * 0.05)
+                # 95% to the server owner via Connect, 5% stays as
+                # Koda's platform fee -- confirm_ticket/1's server-bank
+                # points credit (unchanged) is a separate symbolic
+                # number layered on that same 5%, not money moved twice.
+                owner_amount_cents = event.price_cents - fee_cents
+
+                case Stripe.Checkout.Session.create(%{
+                  mode: :payment,
+                  line_items: [%{
+                    price_data: %{
+                      currency: "usd",
+                      product_data: %{name: "Ticket: #{event.title}"},
+                      unit_amount: event.price_cents
+                    },
+                    quantity: 1
+                  }],
+                  payment_intent_data: %{
+                    transfer_data: %{
+                      destination: connect_acct.stripe_account_id,
+                      amount:       owner_amount_cents
+                    },
+                    metadata: %{type: "stage_ticket", event_id: event_id, buyer_id: buyer_id}
+                  },
+                  success_url: Koda.Marketplace.checkout_success_url(),
+                  cancel_url:  Koda.Marketplace.checkout_cancel_url()
+                }, api_key: stripe_key) do
+                  {:ok, session} ->
+                    {:ok, ticket} = %EventTicket{}
+                    |> EventTicket.changeset(%{
+                      event_id:                 event_id,
+                      buyer_id:                 buyer_id,
+                      amount_cents:             event.price_cents,
+                      fee_cents:                fee_cents,
+                      stripe_payment_intent_id: session.payment_intent,
+                      status:                   "pending"
+                    })
+                    |> Repo.insert()
+                    {:ok, %{ticket: ticket, checkout_url: session.url, free: false}}
+                  {:error, err} -> {:error, err}
+                end
             end
         end
     end

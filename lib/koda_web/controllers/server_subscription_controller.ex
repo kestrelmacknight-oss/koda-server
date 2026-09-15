@@ -30,7 +30,14 @@ defmodule KodaWeb.ServerSubscriptionController do
       }
       case ServerSubscriptions.create_tier(attrs) do
         {:ok, tier} ->
-          conn |> put_status(201) |> json(%{tier: ServerSubscriptions.tier_json(tier)})
+          conn |> put_status(201) |> json(%{
+            tier: ServerSubscriptions.tier_json(tier),
+            # Surfaced so the client can warn the owner up front rather
+            # than members hitting a checkout error later -- members
+            # literally cannot pay into this tier until the owner
+            # connects Stripe (see create_subscription_intent/2).
+            owner_payable: ServerSubscriptions.owner_payable?(server_id)
+          })
         {:error, :max_tiers_reached} ->
           conn |> put_status(422) |> json(%{error: "Maximum of 3 tiers per server"})
         {:error, cs} ->
@@ -96,6 +103,10 @@ defmodule KodaWeb.ServerSubscriptionController do
         conn |> put_status(201) |> json(result)
       {:error, :tier_not_found} ->
         conn |> put_status(404) |> json(%{error: "Tier not found"})
+      {:error, :owner_not_connected} ->
+        conn |> put_status(422) |> json(%{error: "This server's owner hasn't connected Stripe yet"})
+      {:error, :owner_not_onboarded} ->
+        conn |> put_status(422) |> json(%{error: "This server's owner hasn't finished Stripe onboarding"})
       {:error, err} ->
         conn |> put_status(422) |> json(%{error: inspect(err)})
     end

@@ -164,6 +164,10 @@ defmodule KodaWeb.DigitalProductsController do
         conn |> put_status(404) |> json(%{error: "Product not found"})
       {:error, :no_keys_available} ->
         conn |> put_status(422) |> json(%{error: "No license keys available"})
+      {:error, :creator_not_connected} ->
+        conn |> put_status(422) |> json(%{error: "This creator hasn't connected Stripe yet"})
+      {:error, :creator_not_onboarded} ->
+        conn |> put_status(422) |> json(%{error: "This creator hasn't finished Stripe onboarding"})
       {:error, err} ->
         conn |> put_status(422) |> json(%{error: inspect(err)})
     end

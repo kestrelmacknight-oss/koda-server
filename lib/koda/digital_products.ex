@@ -193,9 +193,25 @@ defmodule Koda.DigitalProducts do
           # Free product
           complete_free_purchase(product, buyer_id)
 
+        is_nil(Marketplace.get_connect_account(product.creator_id)) ->
+          {:error, :creator_not_connected}
+
+        not Marketplace.get_connect_account(product.creator_id).charges_enabled ->
+          {:error, :creator_not_onboarded}
+
         true ->
-          # Paid — create a Stripe Checkout Session
+          # Paid — create a Stripe Checkout Session. 95% goes to the
+          # product's creator via Stripe Connect (scope: "creator"
+          # products have no server at all, so this is the only correct
+          # recipient regardless of scope), 5% stays in Koda's own
+          # balance as the platform fee. confirm_purchase/1's server-bank
+          # points credit is unchanged and separate -- a symbolic loyalty
+          # number, not money moved a second time.
           stripe_key = Application.get_env(:koda, :stripe_secret_key)
+          connect_acct = Marketplace.get_connect_account(product.creator_id)
+          fee_cents = round(product.price_cents * 0.05)
+          creator_amount_cents = product.price_cents - fee_cents
+
           case Stripe.Checkout.Session.create(%{
             mode: :payment,
             line_items: [%{
@@ -207,6 +223,10 @@ defmodule Koda.DigitalProducts do
               quantity: 1
             }],
             payment_intent_data: %{
+              transfer_data: %{
+                destination: connect_acct.stripe_account_id,
+                amount:       creator_amount_cents
+              },
               metadata: %{
                 type:       "digital_product",
                 product_id: product_id,
