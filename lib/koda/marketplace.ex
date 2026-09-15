@@ -195,6 +195,17 @@ defmodule Koda.Marketplace do
     }
   end
 
+  @doc """
+  Where Stripe Checkout redirects after a successful/cancelled payment.
+  The app never relies on this redirect for state -- confirmation flows
+  entirely through the webhook + a push notification to the buyer's own
+  client (Koda.Notifications.notify_and_push/5), since desktop has no
+  way to deep-link back into the app. A plain page is enough here;
+  dedicated confirmation pages on koda.fyi would just be UX polish.
+  """
+  def checkout_success_url, do: "https://koda.fyi/?payment=success"
+  def checkout_cancel_url,  do: "https://koda.fyi/?payment=cancelled"
+
   def create_tip_payment_intent(from_user_id, to_user_id, server_id, amount_cents, message \\ nil) do
     stripe_key = Application.get_env(:koda, :stripe_secret_key)
     calc = calculate_tip(amount_cents)
@@ -206,34 +217,53 @@ defmodule Koda.Marketplace do
         unless connect_acct.charges_enabled do
           {:error, :creator_not_onboarded}
         else
-          # Create PaymentIntent with automatic transfer to creator
-          case Stripe.PaymentIntent.create(%{
-            amount:   amount_cents,
-            currency: "usd",
-            transfer_data: %{
-              destination: connect_acct.stripe_account_id,
-              amount:       amount_cents
+          # A Checkout Session (not a bare PaymentIntent) since desktop --
+          # this app's actual primary platform -- has no native Stripe
+          # SDK; the client opens session.url in the system browser and
+          # Stripe hosts the entire card-entry UI. payment_intent_data
+          # carries the same transfer_data/metadata a direct
+          # PaymentIntent.create would have, so the underlying
+          # PaymentIntent this session creates immediately (session.payment_intent)
+          # is indistinguishable to confirm_tip/1 and the webhook handler
+          # below from one created the old way -- neither needed to change.
+          case Stripe.Checkout.Session.create(%{
+            mode: :payment,
+            line_items: [%{
+              price_data: %{
+                currency: "usd",
+                product_data: %{name: "Tip"},
+                unit_amount: amount_cents
+              },
+              quantity: 1
+            }],
+            payment_intent_data: %{
+              transfer_data: %{
+                destination: connect_acct.stripe_account_id,
+                amount:       amount_cents
+              },
+              metadata: %{
+                from_user_id: from_user_id,
+                to_user_id:   to_user_id,
+                server_id:    server_id || "",
+                type:         "tip"
+              }
             },
-            metadata: %{
-              from_user_id: from_user_id,
-              to_user_id:   to_user_id,
-              server_id:    server_id || "",
-              type:         "tip"
-            }
+            success_url: checkout_success_url(),
+            cancel_url:  checkout_cancel_url()
           }, api_key: stripe_key) do
-            {:ok, pi} ->
+            {:ok, session} ->
               # Create pending tip record
               {:ok, tip} = %MarketplaceTip{}
               |> MarketplaceTip.changeset(Map.merge(calc, %{
                 from_user_id:             from_user_id,
                 to_user_id:               to_user_id,
                 server_id:                server_id,
-                stripe_payment_intent_id: pi.id,
+                stripe_payment_intent_id: session.payment_intent,
                 status:                   "pending",
                 message:                  message
               }))
               |> Repo.insert()
-              {:ok, %{tip: tip, client_secret: pi.client_secret}}
+              {:ok, %{tip: tip, checkout_url: session.url}}
             {:error, err} -> {:error, err}
           end
         end
@@ -254,6 +284,13 @@ defmodule Koda.Marketplace do
               credit_server_bank(updated_tip.server_id, updated_tip.points_credited,
                 "tip", updated_tip.id)
             end
+            # Tell the tipper's own client their Checkout tab is done --
+            # the app has no other way to know without this, since it
+            # can't poll Stripe or receive a deep-link callback.
+            amount_str = :erlang.float_to_binary(updated_tip.amount_cents / 100, decimals: 2)
+            Koda.Notifications.notify_and_push(updated_tip.from_user_id, "payment_confirmed",
+              "Tip sent", "Your $#{amount_str} tip went through.",
+              %{payment_type: "tip", tip_id: updated_tip.id})
             {:ok, updated_tip}
           err -> err
         end
@@ -403,18 +440,29 @@ defmodule Koda.Marketplace do
     unless amount_cents do
       {:error, :invalid_tier}
     else
-      case Stripe.PaymentIntent.create(%{
-        amount:   amount_cents,
-        currency: "usd",
-        metadata: %{
-          user_id:          user_id,
-          tier:             tier,
-          server_id:        server_id || "",
-          gifted_by:        gifted_by_user_id || "",
-          type:             "subscription"
-        }
+      case Stripe.Checkout.Session.create(%{
+        mode: :payment,
+        line_items: [%{
+          price_data: %{
+            currency: "usd",
+            product_data: %{name: "Koda #{String.capitalize(tier)} subscription"},
+            unit_amount: amount_cents
+          },
+          quantity: 1
+        }],
+        payment_intent_data: %{
+          metadata: %{
+            user_id:          user_id,
+            tier:             tier,
+            server_id:        server_id || "",
+            gifted_by:        gifted_by_user_id || "",
+            type:             "subscription"
+          }
+        },
+        success_url: checkout_success_url(),
+        cancel_url:  checkout_cancel_url()
       }, api_key: stripe_key) do
-        {:ok, pi} -> {:ok, pi.client_secret}
+        {:ok, session} -> {:ok, session.url}
         {:error, err} -> {:error, err}
       end
     end
@@ -462,6 +510,14 @@ defmodule Koda.Marketplace do
         if tier == "pulse" do
           Koda.Boosts.mint_boost_token(user_id)
         end
+
+        # Notify whoever actually paid -- the gift-giver if this was
+        # gifted, otherwise the subscriber themselves -- that their
+        # Checkout tab is done.
+        payer_id = gifted_by || user_id
+        Koda.Notifications.notify_and_push(payer_id, "payment_confirmed",
+          "Subscription active", "Koda #{String.capitalize(tier)} is now active.",
+          %{payment_type: "subscription", subscription_id: sub.id})
 
         {:ok, sub}
       {:error, err} -> {:error, err}

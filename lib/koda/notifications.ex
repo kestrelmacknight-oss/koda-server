@@ -47,6 +47,35 @@ defmodule Koda.Notifications do
     |> Repo.insert()
   end
 
+  @doc """
+  Persists a notification and immediately pushes it over the user's own
+  socket topic ("user:\#{id}"), same event shape Koda.Chat's mention
+  notifications already use -- the client's single existing "notification"
+  listener (home_screen.dart's _subscribeToUserNotifications) handles both
+  with no new client-side plumbing needed. Used by every payment confirm
+  path (tips, subscriptions, digital goods, stage tickets) to tell the
+  buyer's own client a Stripe Checkout it opened just completed.
+  """
+  def notify_and_push(user_id, type, title, body \\ nil, data \\ %{}) do
+    case create(user_id, type, title, body, data) do
+      {:ok, notif} = result ->
+        Phoenix.PubSub.broadcast(
+          Koda.PubSub,
+          "user:#{user_id}",
+          {:notification, %{
+            id:          notif.id,
+            type:        notif.type,
+            title:       notif.title,
+            body:        notif.body,
+            data:        notif.data,
+            inserted_at: DateTime.to_iso8601(notif.inserted_at)
+          }}
+        )
+        result
+      error -> error
+    end
+  end
+
   def mark_read(id) do
     Repo.update_all(from(n in Notification, where: n.id == ^id), set: [read: true])
   end

@@ -156,8 +156,8 @@ defmodule KodaWeb.DigitalProductsController do
     case DigitalProducts.create_purchase_intent(id, user.id) do
       {:ok, %{free: true, download_token: token, license_key: key}} ->
         json(conn, %{free: true, download_token: token, license_key: key})
-      {:ok, %{client_secret: secret}} ->
-        json(conn, %{free: false, client_secret: secret})
+      {:ok, %{checkout_url: url}} ->
+        json(conn, %{free: false, checkout_url: url})
       {:error, :already_purchased} ->
         conn |> put_status(422) |> json(%{error: "Already purchased"})
       {:error, :product_not_found} ->

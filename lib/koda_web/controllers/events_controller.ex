@@ -118,8 +118,8 @@ defmodule KodaWeb.EventsController do
     case Events.create_ticket_intent(event_id, user.id) do
       {:ok, %{free: true} = result} ->
         json(conn, %{free: true, ticket_id: result.ticket.id})
-      {:ok, %{client_secret: secret}} ->
-        json(conn, %{free: false, client_secret: secret})
+      {:ok, %{checkout_url: url}} ->
+        json(conn, %{free: false, checkout_url: url})
       {:error, :event_not_found} ->
         conn |> put_status(404) |> json(%{error: "Event not found"})
       {:error, :already_has_ticket} ->

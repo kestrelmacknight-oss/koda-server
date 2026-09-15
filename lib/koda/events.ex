@@ -343,23 +343,34 @@ defmodule Koda.Events do
             stripe_key = Application.get_env(:koda, :stripe_secret_key)
             fee_cents = round(event.price_cents * 0.05)
 
-            case Stripe.PaymentIntent.create(%{
-              amount:   event.price_cents,
-              currency: "usd",
-              metadata: %{type: "stage_ticket", event_id: event_id, buyer_id: buyer_id}
+            case Stripe.Checkout.Session.create(%{
+              mode: :payment,
+              line_items: [%{
+                price_data: %{
+                  currency: "usd",
+                  product_data: %{name: "Ticket: #{event.title}"},
+                  unit_amount: event.price_cents
+                },
+                quantity: 1
+              }],
+              payment_intent_data: %{
+                metadata: %{type: "stage_ticket", event_id: event_id, buyer_id: buyer_id}
+              },
+              success_url: Koda.Marketplace.checkout_success_url(),
+              cancel_url:  Koda.Marketplace.checkout_cancel_url()
             }, api_key: stripe_key) do
-              {:ok, pi} ->
+              {:ok, session} ->
                 {:ok, ticket} = %EventTicket{}
                 |> EventTicket.changeset(%{
                   event_id:                 event_id,
                   buyer_id:                 buyer_id,
                   amount_cents:             event.price_cents,
                   fee_cents:                fee_cents,
-                  stripe_payment_intent_id: pi.id,
+                  stripe_payment_intent_id: session.payment_intent,
                   status:                   "pending"
                 })
                 |> Repo.insert()
-                {:ok, %{ticket: ticket, client_secret: pi.client_secret, free: false}}
+                {:ok, %{ticket: ticket, checkout_url: session.url, free: false}}
               {:error, err} -> {:error, err}
             end
         end
@@ -388,6 +399,10 @@ defmodule Koda.Events do
 
         Phoenix.PubSub.broadcast(Koda.PubSub, "user:#{updated.buyer_id}",
           {:ticket_confirmed, %{event_id: updated.event_id}})
+        Koda.Notifications.notify_and_push(updated.buyer_id, "payment_confirmed",
+          "Ticket confirmed",
+          "#{if event, do: "Your ticket for #{event.title} is confirmed.", else: "Your ticket is confirmed."}",
+          %{payment_type: "stage_ticket", event_id: updated.event_id})
 
         {:ok, updated}
     end

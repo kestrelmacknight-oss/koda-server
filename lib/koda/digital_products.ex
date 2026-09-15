@@ -194,28 +194,39 @@ defmodule Koda.DigitalProducts do
           complete_free_purchase(product, buyer_id)
 
         true ->
-          # Paid — create Stripe PaymentIntent
+          # Paid — create a Stripe Checkout Session
           stripe_key = Application.get_env(:koda, :stripe_secret_key)
-          case Stripe.PaymentIntent.create(%{
-            amount:   product.price_cents,
-            currency: "usd",
-            metadata: %{
-              type:       "digital_product",
-              product_id: product_id,
-              buyer_id:   buyer_id
-            }
+          case Stripe.Checkout.Session.create(%{
+            mode: :payment,
+            line_items: [%{
+              price_data: %{
+                currency: "usd",
+                product_data: %{name: product.title},
+                unit_amount: product.price_cents
+              },
+              quantity: 1
+            }],
+            payment_intent_data: %{
+              metadata: %{
+                type:       "digital_product",
+                product_id: product_id,
+                buyer_id:   buyer_id
+              }
+            },
+            success_url: Marketplace.checkout_success_url(),
+            cancel_url:  Marketplace.checkout_cancel_url()
           }, api_key: stripe_key) do
-            {:ok, pi} ->
+            {:ok, session} ->
               {:ok, purchase} = %Purchase{}
               |> Purchase.changeset(%{
                 product_id:               product_id,
                 buyer_id:                 buyer_id,
                 amount_cents:             product.price_cents,
-                stripe_payment_intent_id: pi.id,
+                stripe_payment_intent_id: session.payment_intent,
                 status:                   "pending"
               })
               |> Repo.insert()
-              {:ok, %{purchase: purchase, client_secret: pi.client_secret,
+              {:ok, %{purchase: purchase, checkout_url: session.url,
                       free: false}}
             {:error, err} -> {:error, err}
           end
@@ -301,13 +312,20 @@ defmodule Koda.DigitalProducts do
           Marketplace.credit_server_bank(product.server_id, fee_cents, "digital_product", updated.id)
         end
 
-        # Notify buyer via PubSub
+        # Notify buyer via PubSub (existing purchase_complete event, for
+        # any screen with its own live subscription open) and via the
+        # generic push-notification pipeline (so the buyer's client
+        # learns their Checkout tab is done even if the purchase screen
+        # itself isn't the one currently in front).
         Phoenix.PubSub.broadcast(Koda.PubSub, "user:#{purchase.buyer_id}",
           {:purchase_complete, %{
             product_id:     purchase.product_id,
             download_token: token,
             license_key:    license_key
           }})
+        Koda.Notifications.notify_and_push(purchase.buyer_id, "payment_confirmed",
+          "Purchase complete", "#{if product, do: product.title, else: "Your purchase"} is ready to download.",
+          %{payment_type: "digital_product", purchase_id: updated.id, product_id: purchase.product_id})
 
         {:ok, updated}
     end

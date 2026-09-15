@@ -116,23 +116,34 @@ defmodule Koda.ServerSubscriptions do
       tier ->
         stripe_key = Application.get_env(:koda, :stripe_secret_key)
         fee_cents = round(tier.price_cents * @platform_fee_percent)
-        case Stripe.PaymentIntent.create(%{
-          amount:   tier.price_cents,
-          currency: "usd",
-          metadata: %{
-            type:      "server_subscription",
-            tier_id:   tier.id,
-            server_id: tier.server_id,
-            user_id:   user_id,
-            fee_cents: fee_cents
-          }
+        case Stripe.Checkout.Session.create(%{
+          mode: :payment,
+          line_items: [%{
+            price_data: %{
+              currency: "usd",
+              product_data: %{name: "#{tier.name} subscription"},
+              unit_amount: tier.price_cents
+            },
+            quantity: 1
+          }],
+          payment_intent_data: %{
+            metadata: %{
+              type:      "server_subscription",
+              tier_id:   tier.id,
+              server_id: tier.server_id,
+              user_id:   user_id,
+              fee_cents: fee_cents
+            }
+          },
+          success_url: Marketplace.checkout_success_url(),
+          cancel_url:  Marketplace.checkout_cancel_url()
         }, api_key: stripe_key) do
-          {:ok, pi} ->
+          {:ok, session} ->
             {:ok, %{
-              client_secret: pi.client_secret,
-              amount_cents:  tier.price_cents,
-              fee_cents:     fee_cents,
-              tier:          tier_json(tier)
+              checkout_url: session.url,
+              amount_cents: tier.price_cents,
+              fee_cents:    fee_cents,
+              tier:         tier_json(tier)
             }}
           {:error, err} -> {:error, err}
         end
@@ -176,6 +187,10 @@ defmodule Koda.ServerSubscriptions do
           if tier.role_id do
             assign_subscriber_role(server_id, user_id, tier.role_id)
           end
+
+          Koda.Notifications.notify_and_push(user_id, "payment_confirmed",
+            "Subscription active", "Your #{tier.name} subscription is now active.",
+            %{payment_type: "server_subscription", subscription_id: sub.id})
 
           {:ok, sub}
         end

@@ -66,10 +66,10 @@ defmodule KodaWeb.MarketplaceController do
     message = Map.get(params, "message")
     case Marketplace.create_tip_payment_intent(
         user.id, to_user_id, server_id, amount_cents, message) do
-      {:ok, %{tip: tip, client_secret: secret}} ->
+      {:ok, %{tip: tip, checkout_url: url}} ->
         conn |> put_status(201) |> json(%{
           tip: Marketplace.tip_json(tip),
-          client_secret: secret
+          checkout_url: url
         })
       {:error, :creator_not_connected} ->
         conn |> put_status(422) |> json(%{error: "Creator has not connected Stripe"})
@@ -108,8 +108,8 @@ defmodule KodaWeb.MarketplaceController do
 
     case Marketplace.create_subscription_payment_intent(
         target_user_id, tier, server_id, gifted_by) do
-      {:ok, client_secret} ->
-        conn |> put_status(201) |> json(%{client_secret: client_secret,
+      {:ok, checkout_url} ->
+        conn |> put_status(201) |> json(%{checkout_url: checkout_url,
                                           tier: tier,
                                           amount_cents: Marketplace.subscription_price(tier)})
       {:error, :invalid_tier} ->
