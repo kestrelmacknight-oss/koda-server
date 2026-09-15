@@ -41,7 +41,6 @@ WORKDIR /app
 RUN chown nobody /app
 
 COPY --from=build --chown=nobody:root /app/_build/prod/rel/koda ./
-COPY --chown=nobody:root rel/inetrc /app/inetrc
 
 USER nobody
 

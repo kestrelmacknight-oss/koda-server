@@ -1,9 +1,11 @@
 import Config
 
 if config_env() == :prod do
+  # Neon-hosted Postgres. Set via Railway's service variables, not this
+  # file -- DATABASE_URL is Neon's pooled connection string.
   database_url =
     System.get_env("DATABASE_URL") ||
-      raise "DATABASE_URL is not set. fly secrets set DATABASE_URL=postgresql://..."
+      raise "DATABASE_URL is not set. Set it in Railway's service variables to your Neon connection string."
 
   config :koda, Koda.Repo,
     url:       database_url,

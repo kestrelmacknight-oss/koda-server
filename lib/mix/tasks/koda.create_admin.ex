@@ -2,9 +2,8 @@ defmodule Mix.Tasks.Koda.CreateAdmin do
   @moduledoc """
   Creates the initial platform admin account.
 
-  Run on Fly.io after deployment:
-    fly ssh console --app koda-server \\
-      --command "/app/bin/koda eval 'Mix.Tasks.Koda.CreateAdmin.run([])'"
+  Run on Railway after deployment, from the service's Shell tab:
+    /app/bin/koda eval "Mix.Tasks.Koda.CreateAdmin.run([])"
   """
   use Mix.Task
 
