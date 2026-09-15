@@ -82,7 +82,12 @@ defmodule KodaWeb.ChannelController do
           encrypted: encrypted,
           reply_to_id: reply_to_id,
           attachment_url: Map.get(params, "attachment_url"),
-          attachment_content_type: Map.get(params, "attachment_content_type")) do
+          attachment_content_type: Map.get(params, "attachment_content_type"),
+          epoch: Map.get(params, "epoch"),
+          nonce: Map.get(params, "nonce"),
+          mentioned_user_ids: Map.get(params, "mentioned_user_ids", []),
+          mentioned_role_ids: Map.get(params, "mentioned_role_ids", []),
+          mention_everyone: Map.get(params, "mention_everyone", false)) do
         {:ok, msg}   -> conn |> put_status(201) |> json(%{message: msg})
         {:error, _}  -> conn |> put_status(422) |> json(%{error: "Send failed"})
       end
@@ -91,9 +96,9 @@ defmodule KodaWeb.ChannelController do
     end
   end
 
-  def edit_message(conn, %{"channel_id" => channel_id, "message_id" => message_id, "content" => content}) do
+  def edit_message(conn, %{"channel_id" => channel_id, "message_id" => message_id, "content" => content} = params) do
     user = Guardian.Plug.current_resource(conn)
-    case Chat.edit_message(channel_id, message_id, user.id, content) do
+    case Chat.edit_message(channel_id, message_id, user.id, content, nonce: Map.get(params, "nonce")) do
       {:ok, payload} -> json(conn, %{message: payload})
       {:error, :not_found} -> conn |> put_status(404) |> json(%{error: "Message not found"})
       {:error, _} -> conn |> put_status(500) |> json(%{error: "Edit failed"})

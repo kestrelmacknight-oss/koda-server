@@ -104,13 +104,21 @@ defmodule KodaWeb.RoomChannel do
   end
 
   @impl true
-  def handle_in("new_message", %{"content" => content}, socket) do
+  def handle_in("new_message", %{"content" => content} = params, socket) do
     user       = socket.assigns[:current_user]
     channel_id = socket.assigns[:channel_id]
     channel    = Servers.get_channel(channel_id)
 
     if channel && Servers.member_can_send_message?(channel, user.id) do
-      case Chat.send_message(channel_id, user.id, content) do
+      case Chat.send_message(channel_id, user.id, content,
+          sender_username: user.username,
+          encrypted: Map.get(params, "encrypted", false),
+          reply_to_id: Map.get(params, "reply_to_id"),
+          epoch: Map.get(params, "epoch"),
+          nonce: Map.get(params, "nonce"),
+          mentioned_user_ids: Map.get(params, "mentioned_user_ids", []),
+          mentioned_role_ids: Map.get(params, "mentioned_role_ids", []),
+          mention_everyone: Map.get(params, "mention_everyone", false)) do
         {:ok, msg}  -> {:reply, {:ok, msg}, socket}
         {:error, _} -> {:reply, {:error, %{reason: "send_failed"}}, socket}
       end

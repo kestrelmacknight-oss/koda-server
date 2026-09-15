@@ -163,6 +163,13 @@ defmodule KodaWeb.Router do
     get    "/channels/:channel_id/pins",                      ChannelController, :pins
     post   "/channels/:channel_id/read",                      ChannelController, :mark_read
 
+    # Channel group encryption (shared epoch key + per-recipient delivery)
+    get    "/channels/:channel_id/epoch",                     ChannelCryptoController, :show
+    post   "/channels/:channel_id/epoch",                     ChannelCryptoController, :start_epoch
+    get    "/channels/:channel_id/epoch/:epoch/pending",       ChannelCryptoController, :pending
+    post   "/channels/:channel_id/epoch/deliveries",           ChannelCryptoController, :deliver
+    get    "/channels/:channel_id/epoch/my_deliveries",        ChannelCryptoController, :my_deliveries
+
     # GIF picker (Giphy proxy -- key stays server-side)
     get    "/gifs/search",                  GiphyController, :search
     get    "/gifs/trending",                GiphyController, :trending

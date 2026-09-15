@@ -26,12 +26,25 @@ defmodule Koda.Chat do
       field :attachment_url,          :string
       field :attachment_content_type, :string
       field :link_preview,            :map
+      # Which shared channel-key epoch this was encrypted with (nil for
+      # legacy/unencrypted history), and the AES-GCM nonce used -- see
+      # Koda.ChannelCrypto for the epoch key distribution this relies on.
+      field :epoch, :integer
+      field :nonce,  :string
+      # Mentions are computed client-side against the plaintext before
+      # encryption and sent as explicit IDs instead of the server
+      # regex-scanning content -- see process_mentions/4 below, which
+      # only takes this path when encrypted is true.
+      field :mentioned_user_ids, {:array, :binary_id}, default: []
+      field :mentioned_role_ids, {:array, :binary_id}, default: []
+      field :mention_everyone,   :boolean, default: false
     end
 
     def changeset(m, attrs) do
       m
       |> cast(attrs, [:id, :channel_id, :sender_id, :content, :encrypted, :reply_to_id,
-                      :inserted_at, :attachment_url, :attachment_content_type, :link_preview])
+                      :inserted_at, :attachment_url, :attachment_content_type, :link_preview,
+                      :epoch, :nonce, :mentioned_user_ids, :mentioned_role_ids, :mention_everyone])
       |> validate_required([:channel_id, :sender_id])
       |> validate_content_or_attachment()
     end
@@ -87,6 +100,11 @@ defmodule Koda.Chat do
     reply_to_id        = Keyword.get(opts, :reply_to_id, nil)
     attachment_url     = Keyword.get(opts, :attachment_url, nil)
     attachment_type    = Keyword.get(opts, :attachment_content_type, nil)
+    epoch              = Keyword.get(opts, :epoch, nil)
+    nonce              = Keyword.get(opts, :nonce, nil)
+    mentioned_user_ids = Keyword.get(opts, :mentioned_user_ids, [])
+    mentioned_role_ids = Keyword.get(opts, :mentioned_role_ids, [])
+    mention_everyone   = Keyword.get(opts, :mention_everyone, false)
     message_id         = Ecto.UUID.generate()
     now                = DateTime.utc_now() |> DateTime.truncate(:second)
 
@@ -100,7 +118,12 @@ defmodule Koda.Chat do
               reply_to_id: reply_to_id,
               inserted_at: now,
               attachment_url:          attachment_url,
-              attachment_content_type: attachment_type
+              attachment_content_type: attachment_type,
+              epoch:              epoch,
+              nonce:              nonce,
+              mentioned_user_ids: mentioned_user_ids,
+              mentioned_role_ids: mentioned_role_ids,
+              mention_everyone:   mention_everyone
             })
          |> Repo.insert() do
       {:ok, _} ->
@@ -119,12 +142,23 @@ defmodule Koda.Chat do
           reply_to:    get_reply_preview(reply_to_id),
           inserted_at: DateTime.to_iso8601(now),
           attachment_url:          attachment_url,
-          attachment_content_type: attachment_type
+          attachment_content_type: attachment_type,
+          epoch: epoch,
+          nonce: nonce
         }
         Phoenix.PubSub.broadcast(Koda.PubSub, "channel:#{channel_id}", {:new_message, msg})
         # Process mentions and sidebar unread badges asynchronously --
-        # neither blocks the sender's own send from completing.
-        Task.start(fn -> process_mentions(channel_id, sender_id, content, msg) end)
+        # neither blocks the sender's own send from completing. An
+        # encrypted message carries its mentions as explicit IDs (the
+        # server can't regex plaintext it never sees); a legacy/plaintext
+        # message still gets the old content-scan path.
+        mention_meta = %{
+          encrypted:          encrypted,
+          mentioned_user_ids: mentioned_user_ids,
+          mentioned_role_ids: mentioned_role_ids,
+          mention_everyone:   mention_everyone
+        }
+        Task.start(fn -> process_mentions(channel_id, sender_id, content, msg, mention_meta) end)
         Task.start(fn -> broadcast_unread_bump(channel_id, sender_id) end)
         {:ok, msg}
       {:error, reason} ->
@@ -176,7 +210,9 @@ defmodule Koda.Chat do
         "pinned_at"   => format_ts(m.pinned_at),
         "attachment_url"          => Map.get(m, :attachment_url),
         "attachment_content_type" => Map.get(m, :attachment_content_type),
-        "link_preview"            => Map.get(m, :link_preview)
+        "link_preview"            => Map.get(m, :link_preview),
+        "epoch"                   => Map.get(m, :epoch),
+        "nonce"                   => Map.get(m, :nonce)
       }
     end))
   end
@@ -201,16 +237,25 @@ defmodule Koda.Chat do
     end
   end
 
-  # Only the original sender may edit their own message.
-  def edit_message(channel_id, message_id, sender_id, content) do
+  # Only the original sender may edit their own message. An encrypted
+  # message's edit must carry a fresh nonce -- the editor re-encrypts
+  # under the *same* epoch the message was originally sent with (see
+  # ChannelKeyManager.encryptForEpoch client-side), never the channel's
+  # current epoch, since reusing a nonce with AES-GCM is unsafe and a
+  # message's readability shouldn't change out from under an edit.
+  def edit_message(channel_id, message_id, sender_id, content, opts \\ []) do
+    nonce = Keyword.get(opts, :nonce)
     case Repo.get_by(Message, id: message_id, channel_id: channel_id, sender_id: sender_id) do
       nil -> {:error, :not_found}
       msg ->
         now = DateTime.utc_now() |> DateTime.truncate(:second)
-        case msg |> Ecto.Changeset.change(content: content, edited_at: now) |> Repo.update() do
+        changes = %{content: content, edited_at: now}
+        changes = if nonce, do: Map.put(changes, :nonce, nonce), else: changes
+
+        case msg |> Ecto.Changeset.change(changes) |> Repo.update() do
           {:ok, updated} ->
             payload = %{id: updated.id, channel_id: channel_id, content: content,
-                        edited_at: DateTime.to_iso8601(now)}
+                        nonce: updated.nonce, edited_at: DateTime.to_iso8601(now)}
             Phoenix.PubSub.broadcast(Koda.PubSub, "channel:#{channel_id}",
               {:message_edited, payload})
             {:ok, payload}
@@ -477,12 +522,79 @@ defmodule Koda.Chat do
 
   # ── Mention processing ────────────────────────────────────────────────────
 
-  defp process_mentions(channel_id, sender_id, content, msg) do
+  defp process_mentions(channel_id, sender_id, content, msg, mention_meta) do
     channel = Koda.Repo.get(Koda.Servers.Channel, channel_id)
-    if is_nil(channel), do: :ok, else: do_process_mentions(channel, sender_id, content, msg)
+    if is_nil(channel), do: :ok, else: do_process_mentions(channel, sender_id, content, msg, mention_meta)
   end
 
-  defp do_process_mentions(channel, sender_id, content, msg) do
+  # Encrypted messages carry their mentions as explicit IDs computed
+  # client-side against the plaintext before encryption -- the server
+  # never sees enough to regex-scan content for them. Every ID is still
+  # re-validated against real server membership/roles here rather than
+  # trusted outright, and @everyone still goes through the same
+  # mention_everyone permission gate as the legacy path below.
+  defp do_process_mentions(channel, sender_id, _content, msg,
+         %{encrypted: true} = mention_meta) do
+    import Ecto.Query
+    server_id    = channel.server_id
+    channel_name = channel.name
+    sender       = Koda.Repo.get(Koda.Auth.User, sender_id)
+    sender_name  = if sender, do: sender.username, else: "Someone"
+    title        = "Mentioned in ##{channel_name}"
+    notif_data   = %{channel_id: channel.id, server_id: server_id,
+                      message_id: msg.id, sender: sender_name}
+
+    if mention_meta.mention_everyone and
+         Koda.Servers.member_can?(server_id, sender_id, "mention_everyone") do
+      members = Koda.Repo.all(
+        from m in Koda.Servers.Member,
+        where: m.server_id == ^server_id and m.user_id != ^sender_id,
+        select: m.user_id
+      )
+      Enum.each(members, fn user_id ->
+        {:ok, notif} = Koda.Notifications.create(user_id, "mention", title,
+          "@everyone in ##{channel_name}", notif_data)
+        push_notification(user_id, notif)
+      end)
+    end
+
+    role_ids = mention_meta.mentioned_role_ids || []
+    if role_ids != [] do
+      members = Koda.Repo.all(
+        from mr in Koda.Servers.MemberRole,
+        join: m in Koda.Servers.Member,
+          on: m.id == mr.member_id and m.server_id == ^server_id,
+        join: r in Koda.Servers.Role,
+          on: r.id == mr.role_id and r.server_id == ^server_id,
+        where: mr.role_id in ^role_ids and m.user_id != ^sender_id,
+        select: {m.user_id, r.name}
+      )
+      Enum.each(members, fn {user_id, role_name} ->
+        {:ok, notif} = Koda.Notifications.create(user_id, "role_mention",
+          title, "@#{role_name} in ##{channel_name}", notif_data)
+        push_notification(user_id, notif)
+      end)
+    end
+
+    user_ids = mention_meta.mentioned_user_ids || []
+    if user_ids != [] do
+      valid_member_ids =
+        Koda.Repo.all(
+          from m in Koda.Servers.Member,
+          where: m.server_id == ^server_id and m.user_id in ^user_ids and m.user_id != ^sender_id,
+          select: m.user_id
+        )
+      Enum.each(valid_member_ids, fn user_id ->
+        {:ok, notif} = Koda.Notifications.create(user_id, "mention",
+          title, "Mentioned in ##{channel_name}", notif_data)
+        push_notification(user_id, notif)
+      end)
+    end
+  end
+
+  # Legacy path for unencrypted messages -- the server still has the
+  # plaintext content, so it can keep resolving @word tokens itself.
+  defp do_process_mentions(channel, sender_id, content, msg, _mention_meta) do
     import Ecto.Query
     server_id   = channel.server_id
     channel_name = channel.name
