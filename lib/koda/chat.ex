@@ -95,6 +95,15 @@ defmodule Koda.Chat do
   # ── Channel messages ──────────────────────────────────────────────────────
 
   def send_message(channel_id, sender_id, content, opts \\ []) do
+    server_id = Keyword.get(opts, :server_id)
+    if server_id && Koda.Moderation.RateLimiter.check_send(server_id, channel_id, sender_id) == :rate_limited do
+      {:error, :rate_limited}
+    else
+      do_send_message(channel_id, sender_id, content, opts)
+    end
+  end
+
+  defp do_send_message(channel_id, sender_id, content, opts) do
     sender_username    = Keyword.get(opts, :sender_username, sender_id)
     encrypted          = Keyword.get(opts, :encrypted, false)
     reply_to_id        = Keyword.get(opts, :reply_to_id, nil)

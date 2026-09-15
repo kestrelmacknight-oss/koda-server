@@ -78,6 +78,7 @@ defmodule KodaWeb.ChannelController do
       encrypted = Map.get(params, "encrypted", false)
       reply_to_id = Map.get(params, "reply_to_id")
       case Chat.send_message(channel_id, user.id, content,
+          server_id: channel.server_id,
           sender_username: user.username,
           encrypted: encrypted,
           reply_to_id: reply_to_id,
@@ -89,6 +90,8 @@ defmodule KodaWeb.ChannelController do
           mentioned_role_ids: Map.get(params, "mentioned_role_ids", []),
           mention_everyone: Map.get(params, "mention_everyone", false)) do
         {:ok, msg}   -> conn |> put_status(201) |> json(%{message: msg})
+        {:error, :rate_limited} ->
+          conn |> put_status(429) |> json(%{error: "You're sending messages too fast -- slow down a bit."})
         {:error, _}  -> conn |> put_status(422) |> json(%{error: "Send failed"})
       end
     else

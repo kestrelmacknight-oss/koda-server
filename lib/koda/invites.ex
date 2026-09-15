@@ -121,8 +121,12 @@ defmodule Koda.Invites do
 
       invite ->
         now = DateTime.utc_now()
+        server = Servers.get_server(invite.server_id)
 
         cond do
+          server && server.invites_locked ->
+            {:error, :invites_locked}
+
           invite.expires_at && DateTime.compare(invite.expires_at, now) == :lt ->
             {:error, :expired}
 
@@ -137,10 +141,18 @@ defmodule Koda.Invites do
                 inc: [uses: 1]
               )
 
-              # Add member to server (idempotent if already a member)
+              # Add member to server (idempotent if already a member).
+              # Raid detection only cares about genuinely new joins, not
+              # an existing member re-hitting the same invite link.
               case Servers.get_member(invite.server_id, user_id) do
-                nil -> Servers.add_member(invite.server_id, user_id)
-                _   -> :ok
+                nil ->
+                  Servers.add_member(invite.server_id, user_id)
+                  if Koda.Moderation.RateLimiter.record_join_and_check_raid(invite.server_id) do
+                    Servers.set_invites_locked(invite.server_id, true)
+                    Koda.Moderation.log(invite.server_id, "raid_lockdown_enabled",
+                      metadata: %{"reason" => "burst of joins detected"})
+                  end
+                _ -> :ok
               end
 
               Servers.get_server(invite.server_id)

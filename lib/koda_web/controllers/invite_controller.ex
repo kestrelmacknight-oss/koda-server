@@ -67,6 +67,7 @@ defmodule KodaWeb.InviteController do
       {:error, :invalid_code}    -> conn |> put_status(404) |> json(%{error: "Invalid invite code"})
       {:error, :expired}         -> conn |> put_status(410) |> json(%{error: "This invite has expired"})
       {:error, :max_uses_reached}-> conn |> put_status(410) |> json(%{error: "This invite has reached its maximum uses"})
+      {:error, :invites_locked}  -> conn |> put_status(423) |> json(%{error: "This server has temporarily locked new joins"})
       {:error, _}                -> conn |> put_status(500) |> json(%{error: "Could not join server"})
     end
   end

@@ -111,6 +111,7 @@ defmodule KodaWeb.RoomChannel do
 
     if channel && Servers.member_can_send_message?(channel, user.id) do
       case Chat.send_message(channel_id, user.id, content,
+          server_id: channel.server_id,
           sender_username: user.username,
           encrypted: Map.get(params, "encrypted", false),
           reply_to_id: Map.get(params, "reply_to_id"),
@@ -120,6 +121,7 @@ defmodule KodaWeb.RoomChannel do
           mentioned_role_ids: Map.get(params, "mentioned_role_ids", []),
           mention_everyone: Map.get(params, "mention_everyone", false)) do
         {:ok, msg}  -> {:reply, {:ok, msg}, socket}
+        {:error, :rate_limited} -> {:reply, {:error, %{reason: "rate_limited"}}, socket}
         {:error, _} -> {:reply, {:error, %{reason: "send_failed"}}, socket}
       end
     else

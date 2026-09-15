@@ -13,6 +13,11 @@ defmodule Koda.Servers.Server do
     field :is_public,    :boolean, default: false
     field :category,     :string
     field :member_count, :integer, default: 1
+    # Deliberately NOT in changeset/2's cast list below -- only
+    # Koda.Servers.set_invites_locked/2 may set this, not the general
+    # server-update endpoint. Set automatically by raid detection,
+    # cleared only by a human. See Koda.Moderation.RateLimiter.
+    field :invites_locked, :boolean, default: false
     belongs_to :owner, Koda.Auth.User
     has_many :channels, Koda.Servers.Channel
     has_many :members,  Koda.Servers.Member

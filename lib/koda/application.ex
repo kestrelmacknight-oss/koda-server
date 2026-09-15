@@ -19,8 +19,11 @@ defmodule Koda.Application do
       {Finch, name: Swoosh.Finch},
       # Background jobs
       {Oban, Application.fetch_env!(:koda, Oban)},
-      # DNS clustering (multi-node Fly deployments)
+      # DNS clustering (only active if :dns_cluster_query is configured
+      # for a multi-node deployment; :ignore is a safe no-op otherwise)
       {DNSCluster, query: Application.get_env(:koda, :dns_cluster_query) || :ignore},
+      # Tier 1 moderation: rate limiting, flood/raid detection (ETS-backed)
+      Koda.Moderation.RateLimiter,
       # Web endpoint
       KodaWeb.Endpoint
     ]

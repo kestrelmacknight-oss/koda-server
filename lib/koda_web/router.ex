@@ -151,6 +151,10 @@ defmodule KodaWeb.Router do
     post   "/servers/:server_id/members/:user_id/ban",   ModerationController, :ban_member
     delete "/servers/:server_id/members/:user_id/ban",   ModerationController, :unban_member
     get    "/servers/:server_id/bans",                   ModerationController, :list_bans
+    post   "/servers/:server_id/members/:user_id/mute",  ModerationController, :mute_member
+    delete "/servers/:server_id/members/:user_id/mute",  ModerationController, :unmute_member
+    post   "/servers/:server_id/invites/unlock",         ModerationController, :unlock_invites
+    get    "/servers/:server_id/audit-log",               ModerationController, :audit_log
 
     # Messages
     get    "/channels/:channel_id/messages",ChannelController, :messages

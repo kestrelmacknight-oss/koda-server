@@ -11,7 +11,7 @@ defmodule Koda.Servers.Role do
   @permission_keys ~w(
     view_channels send_messages connect_voice manage_server
     manage_channels manage_roles manage_messages kick_members
-    ban_members mention_everyone post_media manage_marketplace
+    ban_members mute_members mention_everyone post_media manage_marketplace
   )
 
   schema "roles" do

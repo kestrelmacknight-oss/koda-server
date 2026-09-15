@@ -17,6 +17,7 @@ defmodule Koda.Servers do
     "manage_messages"  => false,
     "kick_members"     => false,
     "ban_members"      => false,
+    "mute_members"     => false,
     "mention_everyone" => false,
     "post_media"       => false,
     "manage_marketplace" => false
@@ -38,6 +39,7 @@ defmodule Koda.Servers do
     "manage_messages"  => true,
     "kick_members"     => true,
     "ban_members"      => true,
+    "mute_members"     => true,
     "mention_everyone" => true,
     "post_media"       => true,
     "manage_marketplace" => true
@@ -403,6 +405,15 @@ defmodule Koda.Servers do
       preload: [:user]
     )
   end
+
+  @doc "See Server.invites_locked -- not reachable via the general update_server/2 changeset on purpose."
+  def set_invites_locked(server_id, locked?) do
+    case Repo.get(Server, server_id) do
+      nil -> {:error, :not_found}
+      server ->
+        server |> Ecto.Changeset.change(invites_locked: locked?) |> Repo.update()
+    end
+  end
   def accept_rules(server_id, user_id) do
     case get_member(server_id, user_id) do
       nil -> {:error, :not_member}
@@ -530,11 +541,13 @@ defmodule Koda.Servers do
   @doc """
   Whether a member can post in a channel: everything view access requires,
   plus -- for a read-only ("announcement") channel -- manage_messages or
-  ownership. Shared by the REST send endpoint and the socket's
-  new_message handler so the two can't drift apart on what's allowed.
+  ownership, and not currently muted (Koda.Moderation, Tier 1). Shared by
+  the REST send endpoint and the socket's new_message handler so the two
+  can't drift apart on what's allowed.
   """
   def member_can_send_message?(%Channel{} = channel, user_id) do
     member_can_view_channel?(channel, user_id) &&
+      not Koda.Moderation.muted?(channel.server_id, user_id) &&
       (!channel.is_read_only ||
          owner?(channel.server_id, user_id) ||
          member_can?(channel.server_id, user_id, "manage_messages"))

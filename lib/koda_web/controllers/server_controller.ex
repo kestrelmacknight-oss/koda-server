@@ -64,6 +64,7 @@ defmodule KodaWeb.ServerController do
           %{member_id: m.id, user_id: m.user_id, username: m.user.username,
             avatar_url: m.user.avatar_url, is_subscriber: m.is_subscriber,
             koda_tier: m.user.koda_tier || "free",
+            muted_until: m.muted_until && DateTime.to_iso8601(m.muted_until),
             roles: Enum.map(m.roles, fn r ->
               %{id: r.id, name: r.name, color: r.color}
             end)}
@@ -112,7 +113,7 @@ defmodule KodaWeb.ServerController do
     %{id: s.id, name: s.name, description: s.description,
       icon_url: s.icon_url, is_public: s.is_public,
       category: s.category, member_count: s.member_count,
-      owner_id: s.owner_id}
+      owner_id: s.owner_id, invites_locked: s.invites_locked}
   end
 
   defp format_errors(cs) do
